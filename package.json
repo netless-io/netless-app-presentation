@@ -1,0 +1,24 @@
+{
+  "name": "@netless/app-slideshow",
+  "version": "0.1.0",
+  "description": "Netless App that show images",
+  "author": "netless",
+  "license": "MIT",
+  "repository": "netless-io/app-slideshow",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "esbuild-dev build.ts"
+  },
+  "devDependencies": {
+    "@hyrious/configs": "^0.1.0",
+    "@hyrious/dts": "^0.2.0",
+    "@hyrious/esbuild-dev": "^0.10.5",
+    "@netless/window-manager": "^0.4.66",
+    "@types/node": "^20.11.4",
+    "esbuild": "^0.19.11",
+    "rollup": "^4.9.5",
+    "sass": "^1.69.7"
+  }
+}

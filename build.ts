@@ -50,6 +50,7 @@ fs.rmSync('dist', { recursive: true, force: true })
 
 let bundle = await rollup.rollup({
   input: 'src/index.ts',
+  external: ['jspdf'],
   plugins: [{
     name: 'esbuild',
     async load(id) {
@@ -87,6 +88,11 @@ await Promise.all([
 ])
 
 await bundle.close()
+
+// replace `import('jspdf')` in global js with `window.jspdf`
+let code = fs.readFileSync('dist/index.global.js', 'utf-8')
+code = code.replace(`await import('jspdf')`, `jspdf`)
+fs.writeFileSync('dist/index.global.js', code)
 
 if (process.env.DTS != '0')
   await dts.build('src/index.ts', 'dist/index.d.ts', { exclude: ['@netless/window-manager'] })

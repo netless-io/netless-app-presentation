@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>$ npx @hyrious/w7</title>
+  <style>
+    .wrapper {
+      width: 500px;
+      height: 400px;
+      border: 1px solid;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper"></div>
+
+  <script type="module">
+    import {styles, Presentation} from './dist/index.mjs'
+    globalThis.Presentation = Presentation
+    document.head.appendChild(document.createElement('style')).textContent = styles
+    const presentation = new Presentation({
+      pages: [
+        { src: 'https://convertcdn.netless.link/staticConvert/18140800fe8a11eb8cb787b1c376634e/1.png', width: 714, height: 1010 },
+        { src: 'https://convertcdn.netless.link/staticConvert/18140800fe8a11eb8cb787b1c376634e/2.png', width: 714, height: 1010 },
+      ]
+    })
+    document.querySelector('.wrapper').appendChild(presentation.dom)
+    globalThis.presentation = presentation
+  </script>
+</body>
+</html>

@@ -1,2 +1,3 @@
-export * from "./app-slideshow"
-export { NetlessAppSlideshow as default } from "./app-slideshow"
+export * from "./presentation"
+export * from "./app-presentation"
+export { NetlessAppPresentation as default } from "./app-presentation"

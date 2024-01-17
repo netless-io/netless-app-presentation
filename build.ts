@@ -4,12 +4,14 @@ import * as rollup from 'rollup'
 import * as esbuild from 'esbuild'
 import * as dts from '@hyrious/dts'
 import * as SASS from 'sass'
-import { version } from './package.json'
+import { version, peerDependencies } from './package.json'
+import { createRequire } from 'node:module'
 
 const sass = (): esbuild.Plugin => ({
   name: 'inline-sass',
   setup({ onLoad, esbuild }) {
-    onLoad({ filter: /\.scss$/ }, async args => {
+    onLoad({ filter: /\.scss/ }, async args => {
+      if (args.suffix !== '?inline') return
       const { css } = SASS.compile(args.path, { style: 'compressed' })
       const { outputFiles } = await esbuild.build({
         stdin: {
@@ -30,6 +32,20 @@ const sass = (): esbuild.Plugin => ({
   }
 })
 
+// vanilla-lazyload has "browser": "dist/file.min.js", which is not ESM
+// correct it by choosing the "module" field
+const lazyload = (): esbuild.Plugin => ({
+  name: 'lazyload',
+  setup({ onResolve }) {
+    const require = createRequire(import.meta.url)
+    onResolve({ filter: /^vanilla-lazyload$/ }, args => {
+      const cjs = require.resolve(args.path)
+      const esm = cjs.replace('lazyload.min.js', 'lazyload.esm.js')
+      return { path: esm }
+    })
+  }
+})
+
 fs.rmSync('dist', { recursive: true, force: true })
 
 let bundle = await rollup.rollup({
@@ -45,12 +61,13 @@ let bundle = await rollup.rollup({
         sourcemap: true,
         write: false,
         target: ['es2017'],
-        plugins: [sass()],
+        plugins: [sass(), lazyload()],
         define: {
           __VERSION__: JSON.stringify(version)
         },
         external: Object.keys({
           '@netless/window-manager': '*',
+          ...peerDependencies,
         })
       })
       let code: any, map: any
@@ -66,9 +83,10 @@ let bundle = await rollup.rollup({
 await Promise.all([
   bundle.write({ file: 'dist/index.mjs', format: 'es', sourcemap: true }),
   bundle.write({ file: 'dist/index.js', format: 'cjs', sourcemap: true, interop: 'auto', exports: 'named' }),
-  bundle.write({ file: 'dist/index.global.js', format: 'iife', name: 'NetlessAppSlideshow', exports: 'named' }),
+  bundle.write({ file: 'dist/index.global.js', format: 'iife', name: 'NetlessAppPresentation', exports: 'named' }),
 ])
 
 await bundle.close()
 
-await dts.build('src/index.ts', 'dist/index.d.ts', { exclude: ['@netless/window-manager'] })
+if (process.env.DTS != '0')
+  await dts.build('src/index.ts', 'dist/index.d.ts', { exclude: ['@netless/window-manager'] })

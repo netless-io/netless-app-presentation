@@ -23,18 +23,13 @@ To only develop the UI part, run:
 
 ```bash
 $ pnpm build
-$ npx @hyrious/w7
-```
-
-The goto http://localhost:5000/ to see the app locally.
-
-To develop it in a real whiteboard room, 1) add a file .env.local containing the room's uuid and token, 2) run:
-
-```bash
 $ pnpm dev
 ```
 
-The goto http://localhost:5173/e2e/.
+Then goto http://localhost:5173/ to see the app locally.
+
+To develop it in a real whiteboard room, add a file .env.local containing the room's uuid and token,
+then goto http://localhost:5173/e2e/.
 
 ## License
 

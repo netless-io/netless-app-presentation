@@ -54,13 +54,29 @@ export const NetlessAppPresentation: NetlessApp<{}, unknown, unknown, Presentati
     // Call context.getRoom()?.putScenes(context.getInitScenePath()!, [{ name: '2' }]) to add more scenes.
 
     // Caution: some user may insert a 500-page PDF.
+    // Fast path: create scenes for small amount of pages.
+    if (context.isAddApp && pages.length <= 100) {
+      const room = context.getRoom()
+      if (room && room.isWritable) {
+        const scenes = room.entireScenes()[scenePath]
+        if (scenes.length < pages.length) {
+          const newScenes = pages.map((_, index) => ({ name: String(index + 1) }))
+          room.putScenes(scenePath, newScenes)
+        }
+      }
+    }
 
     const dispose = disposableStore()
 
     const page$$ = context.createStorage('page', { index: 0 })
 
-    const syncPage = (index: number) => {
-      context.dispatchAppEvent('pageStateChange', { index, length: pages.length })
+    let lastIndex = -1
+    const syncPage = async (index: number) => {
+      if (lastIndex !== index) {
+        lastIndex = index
+        context.dispatchAppEvent('pageStateChange', { index, length: pages.length })
+      }
+
       if (!context.getIsWritable()) return
 
       const scenes = context.getDisplayer().entireScenes()[scenePath]
@@ -68,15 +84,15 @@ export const NetlessAppPresentation: NetlessApp<{}, unknown, unknown, Presentati
 
       const name = String(index + 1)
       if (scenes.some(scene => scene.name === name)) {
-        context.setScenePath(`${scenePath}/${name}`)
+        await context.setScenePath(`${scenePath}/${name}`)
       }
 
       else {
         const room = context.getRoom()
         if (!room) return
 
-        room.putScenes(scenePath, [{ name }])
-        context.setScenePath(`${scenePath}/${name}`)
+        await context.addPage({ scene: { name } })
+        await context.setScenePath(`${scenePath}/${name}`)
       }
     }
 

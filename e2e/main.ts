@@ -1,8 +1,9 @@
 /// <reference types="vite/client" />
-import { register, createFastboard, createUI } from '@netless/fastboard'
-import { install, type PresentationController } from '../src'
+import { register, createFastboard, createUI, dispatchDocsEvent } from '@netless/fastboard'
+import { install } from '../src'
 
 install(register, { as: 'DocsViewer' })
+globalThis.dispatchDocsEvent = dispatchDocsEvent
 
 let fastboard = await createFastboard({
   sdkConfig: {
@@ -18,6 +19,10 @@ let fastboard = await createFastboard({
 globalThis.fastboard = fastboard
 fastboard.manager.onAppEvent('DocsViewer', console.log)
 
+fastboard.manager.emitter.on('appsChange', (apps: string[]) => {
+  console.log('apps =', apps.length ? apps.join() : 'empty')
+})
+
 let ui = createUI(fastboard, document.querySelector('#whiteboard')!)
 globalThis.ui = ui
 
@@ -32,7 +37,7 @@ document.querySelector<HTMLButtonElement>('#btn-add')!.onclick = async () => {
     type: 'static',
     convertedPercentage: 100,
   })
-  console.log('=>', appId)
+  console.log('insertDocs() =>', appId)
 }
 
 document.querySelector<HTMLButtonElement>('#btn-pdf')!.onclick = async () => {

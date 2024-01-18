@@ -17,7 +17,7 @@ install(register, { as: 'DocsViewer' })
 
 ## Develop
 
-See [Write you a Netless App](https://github.com/netless-io/fastboard/blob/main/docs/zh/app.md).
+See [Write you a Netless App](https://github.com/netless-io/fastboard/blob/main/docs/en/app.md).
 
 To only develop the UI part, run:
 

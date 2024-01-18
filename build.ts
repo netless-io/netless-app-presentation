@@ -82,8 +82,8 @@ let bundle = await rollup.rollup({
 })
 
 await Promise.all([
-  bundle.write({ file: 'dist/index.mjs', format: 'es', sourcemap: true }),
-  bundle.write({ file: 'dist/index.js', format: 'cjs', sourcemap: true, interop: 'auto', exports: 'named' }),
+  bundle.write({ file: 'dist/index.mjs', format: 'es', sourcemap: true, sourcemapExcludeSources: true }),
+  bundle.write({ file: 'dist/index.js', format: 'cjs', sourcemap: true, sourcemapExcludeSources: true, interop: 'auto', exports: 'named' }),
   bundle.write({ file: 'dist/index.global.js', format: 'iife', name: 'NetlessAppPresentation', exports: 'named' }),
 ])
 

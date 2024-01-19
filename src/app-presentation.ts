@@ -50,18 +50,18 @@ export const NetlessAppPresentation: NetlessApp<{}, unknown, unknown, Presentati
     // https://github.com/netless-io/window-manager/blob/c87df1710867423dcfdbff485b9dbee9270ea409/src/index.ts#L465-L476
     const scenePath = context.getInitScenePath()!
 
-    // In this "presentation" app, we need different scenes to cover different pages.
-    // Call context.getRoom()?.putScenes(context.getInitScenePath()!, [{ name: '2' }]) to add more scenes.
-
+    // Prepare scenes.
     // Caution: some user may insert a 500-page PDF.
-    // Fast path: create scenes for small amount of pages.
-    if (context.isAddApp && pages.length <= 100) {
+    if (context.isAddApp) {
+      if (pages.length > 100)
+        console.warn(`[Presentation]: too many pages (${pages.length}), may cause performance issues`)
+
       const room = context.getRoom()
       if (room && room.isWritable) {
         const scenes = room.entireScenes()[scenePath]
         if (scenes.length < pages.length) {
-          const newScenes = pages.map((_, index) => ({ name: String(index + 1) }))
-          room.putScenes(scenePath, newScenes)
+          // Note: scenes with the same name will be overwritten.
+          room.putScenes(scenePath, pages.map((_, index) => ({ name: String(index + 1) })))
         }
       }
     }
@@ -83,17 +83,15 @@ export const NetlessAppPresentation: NetlessApp<{}, unknown, unknown, Presentati
       if (!scenes) return
 
       const name = String(index + 1)
-      if (scenes.some(scene => scene.name === name)) {
-        await context.setScenePath(`${scenePath}/${name}`)
-      }
 
-      else {
-        const room = context.getRoom()
-        if (!room) return
-
+      // "Prepare scenes" may not run correctly if the user suddenly disconnected after adding the app.
+      // So here we add the missing pages again if not found. This is rare to happen.
+      if (!scenes.some(scene => scene.name === name)) {
         await context.addPage({ scene: { name } })
-        await context.setScenePath(`${scenePath}/${name}`)
       }
+
+      // Switch to that page.
+      await context.setScenePath(`${scenePath}/${name}`)
     }
 
     const jumpPage = (index: number): boolean => {
@@ -111,6 +109,11 @@ export const NetlessAppPresentation: NetlessApp<{}, unknown, unknown, Presentati
       if (!scenes) {
         console.warn(`[Presentation]: no scenes found at ${scenePath}, make sure you have add options.scenePath in addApp()`)
         return false
+      }
+
+      const name = String(index + 1)
+      if (!scenes.some(scene => scene.name === name)) {
+        context.addPage({ scene: { name } })
       }
 
       page$$.setState({ index })

@@ -176,7 +176,7 @@ export class Presentation implements IDisposable<void> {
       if (this.readonly) return
       if (this.pageIndex > 0) this.onNewPageIndex(this.pageIndex - 1, 'navigation')
     }))
-    
+
     const btnPageNext = document.createElement('button')
     btnPageNext.className = `${this.c('footer-btn')} ${this.c('btn-page-next')}`
     btnPageNext.appendChild(arrowRightSVG(this.namespace))
@@ -185,7 +185,7 @@ export class Presentation implements IDisposable<void> {
       if (this.readonly) return
       if (this.pageIndex < this.pages.length - 1) this.onNewPageIndex(this.pageIndex + 1, 'navigation')
     }))
-    
+
     const pageNumber = document.createElement('div')
     pageNumber.className = this.c('page-number')
     this.footerDOM.appendChild(pageNumber)
@@ -207,7 +207,7 @@ export class Presentation implements IDisposable<void> {
     const totalPage = document.createElement('span')
     totalPage.textContent = ` / ${this.pages.length}`
     pageNumber.appendChild(totalPage)
-    
+
     this.dispose.add(listen(window, "keydown", ev => {
       if (this.readonly || this.isEditable(ev.target)) return
       if ((ev.key == 'ArrowUp' || ev.key == 'ArrowLeft') && this.pageIndex > 0)

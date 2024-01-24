@@ -3,21 +3,31 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>$ npm run dev</title>
+  <title>$ pnpm dev</title>
   <style>
     #whiteboard {
       width: 600px;
       height: 400px;
       border: 1px solid;
+    }
+    html:has(#resize:checked) #whiteboard {
       resize: both;
       overflow: scroll;
     }
   </style>
 </head>
 <body>
+  <p>
+    <label>
+      <input id="resize" type="checkbox">
+      Resize Mode
+    </label>
+  </p>
   <div id="whiteboard"></div>
-  <button id="btn-add">Add Example Presentation</button>
-  <button id="btn-pdf">Make PDF</button>
+  <p>
+    <button id="btn-add">Add Example Presentation</button>
+    <button id="btn-pdf">Make PDF</button>
+  </p>
   <script type="module" src="/e2e/main.ts"></script>
 </body>
 </html>

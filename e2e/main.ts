@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 import { register, createFastboard, createUI, dispatchDocsEvent } from '@netless/fastboard'
 import { install } from '../src'
+import { data } from './example'
 
 install(register, { as: 'DocsViewer' })
 globalThis.dispatchDocsEvent = dispatchDocsEvent
@@ -27,12 +28,16 @@ let ui = createUI(fastboard, document.querySelector('#whiteboard')!)
 globalThis.ui = ui
 
 document.querySelector<HTMLButtonElement>('#btn-add')!.onclick = async () => {
+  const r = await data
+  if ('err' in r) return console.error(r.err);
+  const { progress: { convertedFileList } } = r.ok
   const appId = await fastboard.insertDocs('a.pdf', {
     status: 'Finished',
-    images: [
-      { url: 'https://convertcdn.netless.link/staticConvert/18140800fe8a11eb8cb787b1c376634e/1.png', width: 714, height: 1010 },
-      { url: 'https://convertcdn.netless.link/staticConvert/18140800fe8a11eb8cb787b1c376634e/2.png', width: 714, height: 1010 },
-    ],
+    images: convertedFileList.map(e => ({
+      url: e.conversionFileUrl,
+      width: e.width,
+      height: e.height,
+    })),
     uuid: 'abcdef',
     type: 'static',
     convertedPercentage: 100,

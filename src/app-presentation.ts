@@ -10,7 +10,7 @@ export interface PresentationPage {
   src: string;
   width: number;
   height: number;
-  thumbnail: string | undefined;
+  thumbnail?: string | undefined;
 }
 
 export interface PresentationController {

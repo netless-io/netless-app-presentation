@@ -271,13 +271,18 @@ export const NetlessAppPresentation: NetlessApp<{}, unknown, unknown, Presentati
  * Add synchronization to the local presentation.
  */
 class AppPresentation extends Presentation {
+  box?: ReadonlyTeleBox;
   scaleDocsToFit?: () => void;
   readonly jumpPage: (index: number) => void
   constructor(config: PresentationConfig & { jumpPage: (index: number) => void }) {
     super(config)
     this.jumpPage = config.jumpPage
   }
-  override onNewPageIndex(index: number) {
+  override onNewPageIndex(index: number, origin: "navigation" | "keydown" | "input" | "preview") {
+    // If it is triggered by global keydown (left or right arrow),
+    // only the focused one should work
+    if (origin === "keydown" && this.box && !this.box.focus)
+      return
     if (0 <= index && index < this.pages.length) {
       this.jumpPage(index)
     } else {
@@ -295,6 +300,7 @@ const createPresentation = (
   box.mountStyles(styles)
 
   const app = new AppPresentation({ pages, readonly: box.readonly, jumpPage })
+  app.box = box
   box.mountContent(app.contentDOM)
   box.mountFooter(app.footerDOM)
 

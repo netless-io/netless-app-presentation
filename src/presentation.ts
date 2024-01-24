@@ -141,7 +141,7 @@ export class Presentation implements IDisposable<void> {
         ev.preventDefault()
         ev.stopPropagation()
         ev.stopImmediatePropagation()
-        this.onNewPageIndex(Number(pageIndex))
+        this.onNewPageIndex(Number(pageIndex), 'preview')
         this.togglePreview(false)
       }
     }))
@@ -174,7 +174,7 @@ export class Presentation implements IDisposable<void> {
     pageJumps.appendChild(btnPageBack)
     this.dispose.add(listen(btnPageBack, "click", () => {
       if (this.readonly) return
-      if (this.pageIndex > 0) this.onNewPageIndex(this.pageIndex - 1)
+      if (this.pageIndex > 0) this.onNewPageIndex(this.pageIndex - 1, 'navigation')
     }))
     
     const btnPageNext = document.createElement('button')
@@ -183,7 +183,7 @@ export class Presentation implements IDisposable<void> {
     pageJumps.appendChild(btnPageNext)
     this.dispose.add(listen(btnPageNext, "click", () => {
       if (this.readonly) return
-      if (this.pageIndex < this.pages.length - 1) this.onNewPageIndex(this.pageIndex + 1)
+      if (this.pageIndex < this.pages.length - 1) this.onNewPageIndex(this.pageIndex + 1, 'navigation')
     }))
     
     const pageNumber = document.createElement('div')
@@ -200,7 +200,7 @@ export class Presentation implements IDisposable<void> {
     this.dispose.add(listen(this.pageNumberInputDOM, "change", () => {
       if (this.readonly) return
       if (this.pageNumberInputDOM.value) {
-        this.onNewPageIndex(Number(this.pageNumberInputDOM.value) - 1)
+        this.onNewPageIndex(Number(this.pageNumberInputDOM.value) - 1, 'input')
       }
     }))
 
@@ -211,9 +211,9 @@ export class Presentation implements IDisposable<void> {
     this.dispose.add(listen(window, "keydown", ev => {
       if (this.readonly || this.isEditable(ev.target)) return
       if ((ev.key == 'ArrowUp' || ev.key == 'ArrowLeft') && this.pageIndex > 0)
-        this.onNewPageIndex(this.pageIndex - 1)
+        this.onNewPageIndex(this.pageIndex - 1, 'keydown')
       else if ((ev.key == 'ArrowDown' || ev.key == 'ArrowRight') && this.pageIndex < this.pages.length - 1)
-        this.onNewPageIndex(this.pageIndex + 1)
+        this.onNewPageIndex(this.pageIndex + 1, 'keydown')
     }))
   }
 
@@ -255,7 +255,13 @@ export class Presentation implements IDisposable<void> {
     }
   }
 
-  onNewPageIndex(index: number) {
+  // [origin] means the cause:
+  // - navigation: user clicked on the left / right button on footer
+  // - input: user filled the bottom-right page number input box
+  // - preview: user clicked on the left preview menu's item
+  // - keydown: this navigation is caused by user press left or right
+  // Fastboard dispatchDocsEvent() triggers the "navigation" and "input" cause
+  onNewPageIndex(index: number, _origin: "navigation" | "keydown" | "input" | "preview") {
     if (0 <= index && index < this.pages.length) {
       this.setPageIndex(index)
     }

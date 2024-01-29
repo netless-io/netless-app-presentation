@@ -48,7 +48,7 @@ export const NetlessAppPresentation: NetlessApp<{}, unknown, unknown, Presentati
       throw new Error("[Presentation]: legacy dynamic PPT is unsupported, please use the projector converter and @netless/slide to render it")
 
     // Now it must have a blank scene points to "{scenePath}/{scenes[0].name}", e.g. "/pdf/123456/1"
-    // https://github.com/netless-io/window-manager/blob/c87df1710867423dcfdbff485b9dbee9270ea409/src/index.ts#L465-L476
+    // https://github.com/netless-io/window-manager/blob/c87df17/src/index.ts#L465-L476
     const scenePath = context.getInitScenePath()!
 
     // Prepare scenes.
@@ -143,6 +143,24 @@ export const NetlessAppPresentation: NetlessApp<{}, unknown, unknown, Presentati
 
     syncPage(page$$.state.index)
     dispose.add(page$$.addStateChangedListener(() => syncPage(page$$.state.index)))
+
+    // Workaround for window-manager also listens to room state and change scene.
+    // https://github.com/netless-io/window-manager/blob/5e6b79f/src/AppManager.ts#L666
+    //
+    // When we close some app with a whiteboard view, the related scenes will be deleted.
+    // Then whiteboard's room.state.sceneState will automatically navigate to an existing scene.
+    // Then it goes to "/pdf/123456", which is a folder, so it will open the first scene "/pdf/123456/0".
+    //
+    // But we actually does not use that scene, our scenes' names are ["1", "2", ...].
+    // So if we found this situation, force sync page once.
+    dispose.add(context.emitter.on('roomStateChange', (state) => {
+      if (state.sceneState?.scenePath.endsWith('/0')) {
+        // About timing things:
+        // window-manager's listener runs in sync, but context.emitter is based on Emittery
+        // which runs callbacks in the next micro task, so this code will run after the "/0" task.
+        syncPage(page$$.state.index)
+      }
+    }))
 
     const box = context.getBox()
     const app = dispose.add(createPresentation(box, pages, jumpPage, page$$))

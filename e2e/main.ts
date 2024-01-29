@@ -18,7 +18,10 @@ let fastboard = await createFastboard({
   },
 })
 globalThis.fastboard = fastboard
-fastboard.manager.onAppEvent('DocsViewer', console.log)
+fastboard.manager.onAppEvent('DocsViewer', ev => {
+  if (ev.kind == 'DocsViewer' && ev.type == 'pageStateChange')
+    console.log('pageStateChange', ev.value, ev.appId)
+})
 
 fastboard.manager.emitter.on('appsChange', (apps: string[]) => {
   console.log('apps =', apps.length ? apps.join() : 'empty')

@@ -1,4 +1,4 @@
-import type { AnimationMode, NetlessApp, ReadonlyTeleBox, SceneDefinition, Storage, View, WindowManager } from "@netless/window-manager"
+import type { AnimationMode, AppContext, NetlessApp, ReadonlyTeleBox, SceneDefinition, Storage, View, WindowManager } from "@netless/window-manager"
 
 import { disposableStore } from '@wopjs/disposable'
 import { listen } from '@wopjs/dom'
@@ -16,6 +16,7 @@ export interface PresentationPage {
 export interface PresentationController {
   readonly app: Presentation;
   readonly view: View;
+  readonly context: AppContext;
   /** Returns false if failed to jump (either because out of bounds or lack of permissions). */
   jumpPage(index: number): boolean;
   /** Returns false if failed to jump */
@@ -145,6 +146,7 @@ export const NetlessAppPresentation: NetlessApp<{}, unknown, unknown, Presentati
 
     const box = context.getBox()
     const app = dispose.add(createPresentation(box, pages, jumpPage, page$$))
+    app.contentDOM.dataset.appPresentationVersion = __VERSION__
     app.scaleDocsToFit = scaleDocsToFit
 
     context.mountView(app.whiteboardDOM)
@@ -263,7 +265,20 @@ export const NetlessAppPresentation: NetlessApp<{}, unknown, unknown, Presentati
       }
     }))
 
-    return { app, view, jumpPage, prevPage, nextPage, pageState, toPdf }
+    const controller: PresentationController = { app, view, context, jumpPage, prevPage, nextPage, pageState, toPdf }
+
+    dispose.add(listen(window, 'message', (ev: MessageEvent<"@netless/_presentation_">) => {
+      if (ev.data === "@netless/_presentation_") {
+        if (typeof window !== 'undefined') dispose.make(() => {
+          const debug: Set<PresentationController> = ((window as any)._presentation_ ||= new Set())
+          debug.add(controller)
+          return () => debug.delete(controller)
+        })
+        console.log(controller)
+      }
+    }))
+
+    return controller
   }
 }
 

@@ -1,8 +1,7 @@
 {
   "include": ["src"],
-  "extends": "@hyrious/configs/tsconfig.json",
+  "extends": "@hyrious/configs/tsconfig.casual.json",
   "compilerOptions": {
-    "module": "ESNext",
-    "useDefineForClassFields": false
+    "module": "ESNext"
   }
 }

@@ -4,14 +4,7 @@ import { disposableStore } from '@wopjs/disposable'
 import { listen } from '@wopjs/dom'
 
 import styles from './style.scss?inline'
-import { Presentation, type PresentationConfig } from "./presentation";
-
-export interface PresentationPage {
-  src: string;
-  width: number;
-  height: number;
-  thumbnail?: string | undefined;
-}
+import { Presentation, type PresentationConfig, type PresentationPage } from "./presentation";
 
 export interface PresentationController {
   readonly app: Presentation;
@@ -351,7 +344,7 @@ export interface InstallOptions {
   /**
    * Register as another "kind", to hijack existing apps.
    * The default kind is "Presentation".
-   * 
+   *
    * @example "DocsViewer"
    */
   as?: string
@@ -360,7 +353,7 @@ export interface InstallOptions {
 /**
  * Call `register({ kind: "Presentation", src: NetlessAppPresentation })` to register this app.
  * Optionally accepts an options object to override the default kind.
- * 
+ *
  * @example install(register, { as: "DocsViewer" })
  */
 export const install = (register: RegisterFn, options: InstallOptions = {}): Promise<void> => {

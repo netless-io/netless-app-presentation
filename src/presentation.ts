@@ -1,10 +1,17 @@
 import type { IDisposable } from '@wopjs/disposable'
-import type { PresentationPage } from "./app-presentation";
 
 import { disposableStore } from '@wopjs/disposable'
 import { listen } from '@wopjs/dom'
 import { default as LazyLoad, type ILazyLoadInstance } from 'vanilla-lazyload'
 import { arrowLeftSVG, arrowRightSVG, sidebarSVG } from './icons';
+import { Preload } from './preload';
+
+export interface PresentationPage {
+  src: string;
+  width: number;
+  height: number;
+  thumbnail?: string | undefined;
+}
 
 export interface PresentationConfig {
   readonly pages: PresentationPage[]
@@ -49,6 +56,7 @@ export class Presentation implements IDisposable<void> {
   readonly namespace = "netless-app-presentation"
   readonly dispose = disposableStore()
   readonly pages: PresentationPage[]
+  readonly preload: Preload
 
   dom: Element | DocumentFragment
   contentDOM: HTMLDivElement
@@ -67,6 +75,8 @@ export class Presentation implements IDisposable<void> {
 
   constructor(config: PresentationConfig) {
     this.pages = config.pages
+    this.preload = new Preload(this.pages)
+    this.dispose.add(this.preload)
     this.readonly = config.readonly ?? false
     this.dom = document.createElement('div')
     this.dom.className = this.namespace
@@ -272,7 +282,7 @@ export class Presentation implements IDisposable<void> {
   }
 
   updateImage() {
-    const page = this.pages[this.pageIndex]
+    const page = this.page()
     if (!page) {
       this.image.src = ''
       return
@@ -280,6 +290,7 @@ export class Presentation implements IDisposable<void> {
     this.image.width = page.width
     this.image.height = page.height
     this.image.src = page.src
+    this.preload.touch(this.pageIndex)
   }
 
   private c(className: string): string {

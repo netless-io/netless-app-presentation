@@ -34,7 +34,7 @@
     "@netless/fastboard": "^0.3.10",
     "@netless/window-manager": "^0.4.67",
     "@types/node": "^20.11.10",
-    "@wopjs/disposable": "^0.1.3",
+    "@wopjs/disposable": "^0.1.4",
     "@wopjs/dom": "^0.1.3",
     "esbuild": "^0.19.12",
     "jspdf": "^2.5.1",

@@ -49,8 +49,7 @@ export class Preload implements IDisposable {
     this.timer = setTimeout(this.handler.bind(this), 2_000)
   }
 
-  // @wopjs/disposable does not preserve 'this' on invoking dispose() -- may be fixed in 0.1.4
-  dispose = (): void => {
+  dispose() {
     clearTimeout(this.timer)
     for (const link of this.links) {
       link && document.head.contains(link) && document.head.removeChild(link)

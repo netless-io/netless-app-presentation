@@ -1,10 +1,16 @@
-import type { AnimationMode, AppContext, NetlessApp, ReadonlyTeleBox, SceneDefinition, Storage, View, WindowManager } from "@netless/window-manager"
+import type { AnimationMode, AppContext, NetlessApp, ReadonlyTeleBox, Room, SceneDefinition, Storage, View, WindowManager } from "@netless/window-manager"
 
 import { disposableStore } from '@wopjs/disposable'
 import { listen } from '@wopjs/dom'
 
 import styles from './style.scss?inline'
 import { Presentation, type PresentationConfig, type PresentationPage } from "./presentation";
+
+export type Logger = (...data: any[]) => void
+
+export interface PresentationAppOptions {
+  log?: Logger;
+}
 
 export interface PresentationController {
   readonly app: Presentation;
@@ -20,6 +26,8 @@ export interface PresentationController {
   pageState(): { index: number, length: number };
 
   toPdf(): Promise<{ pdf: ArrayBuffer, title: string } | null>;
+
+  log: Logger;
 }
 
 export { styles }
@@ -27,22 +35,34 @@ export { styles }
 const ppt2page = (ppt: SceneDefinition["ppt"]): PresentationPage | null =>
   ppt ? { width: ppt.width, height: ppt.height, src: ppt.src, thumbnail: ppt.previewURL } : null
 
-export const NetlessAppPresentation: NetlessApp<{}, unknown, unknown, PresentationController> = {
+const createLogger = (room: Room | undefined): Logger => {
+  if (room && (room as any).logger) {
+    return (...args) => (room as any).logger.info(...args)
+  } else {
+    return (...args) => console.log(...args)
+  }
+}
+
+export const NetlessAppPresentation: NetlessApp<{}, unknown, PresentationAppOptions, PresentationController> = {
   kind: "Presentation",
   setup(context) {
     const view = context.getView()
     if (!view)
-      throw new Error("[Presentation]: no whiteboard view, make sure you have add options.scenePath in addApp()")
+      throw new Error("[Presentation]: no whiteboard view, make sure you have added options.scenePath in addApp()")
 
     const pages = context.getScenes()?.map(({ ppt }) => ppt2page(ppt)).filter(Boolean) as PresentationPage[]
     if (!pages || pages.length === 0)
-      throw new Error("[Presentation]: empty scenes, make sure you have add options.scenes in addApp()")
+      throw new Error("[Presentation]: empty scenes, make sure you have added options.scenes in addApp()")
     if (pages[0].src.startsWith('ppt'))
       throw new Error("[Presentation]: legacy dynamic PPT is unsupported, please use the projector converter and @netless/slide to render it")
 
     // Now it must have a blank scene points to "{scenePath}/{scenes[0].name}", e.g. "/pdf/123456/1"
     // https://github.com/netless-io/window-manager/blob/c87df17/src/index.ts#L465-L476
     const scenePath = context.getInitScenePath()!
+
+    const options = context.getAppOptions() || {}
+    const log = options.log || createLogger(context.getRoom())
+    log(`[Presentation] new ${context.appId}`)
 
     // Prepare scenes.
     // Caution: some user may insert a 500-page PDF.
@@ -61,6 +81,7 @@ export const NetlessAppPresentation: NetlessApp<{}, unknown, unknown, Presentati
     }
 
     const dispose = disposableStore()
+    dispose.add(() => log(`[Presentation] dispose ${context.appId}`))
 
     const page$$ = context.createStorage('page', { index: 0 })
 
@@ -90,18 +111,18 @@ export const NetlessAppPresentation: NetlessApp<{}, unknown, unknown, Presentati
 
     const jumpPage = (index: number): boolean => {
       if (!context.getIsWritable()) {
-        console.warn('[Presentation]: not writable, make sure you have test room.isWritable')
+        console.warn('[Presentation]: no permission, make sure you have test room.isWritable')
         return false
       }
 
       if (!(0 <= index && index < pages.length)) {
-        console.warn(`[Presentation]: page index ${index} out of bounds [0, ${pages.length - 1}]`)
+        console.warn(`[Presentation]: page ${index + 1} out of bounds [1, ${pages.length}]`)
         return false
       }
 
       const scenes = context.getDisplayer().entireScenes()[scenePath]
       if (!scenes) {
-        console.warn(`[Presentation]: no scenes found at ${scenePath}, make sure you have add options.scenePath in addApp()`)
+        console.warn(`[Presentation]: no scenes found at ${scenePath}, make sure you have added options.scenePath in addApp()`)
         return false
       }
 
@@ -159,6 +180,7 @@ export const NetlessAppPresentation: NetlessApp<{}, unknown, unknown, Presentati
     const app = dispose.add(createPresentation(box, pages, jumpPage, page$$))
     app.contentDOM.dataset.appPresentationVersion = __VERSION__
     app.scaleDocsToFit = scaleDocsToFit
+    app.log = log
 
     context.mountView(app.whiteboardDOM)
     view.disableCameraTransform = true
@@ -276,7 +298,7 @@ export const NetlessAppPresentation: NetlessApp<{}, unknown, unknown, Presentati
       }
     }))
 
-    const controller: PresentationController = { app, view, context, jumpPage, prevPage, nextPage, pageState, toPdf }
+    const controller: PresentationController = { app, view, context, jumpPage, prevPage, nextPage, pageState, toPdf, log }
 
     dispose.add(listen(window, 'message', (ev: MessageEvent<"@netless/_presentation_">) => {
       if (ev.data === "@netless/_presentation_") {
@@ -297,18 +319,23 @@ export const NetlessAppPresentation: NetlessApp<{}, unknown, unknown, Presentati
  * Add synchronization to the local presentation.
  */
 class AppPresentation extends Presentation {
+  log?: Logger;
   box?: ReadonlyTeleBox;
   scaleDocsToFit?: () => void;
   readonly jumpPage: (index: number) => void
+
   constructor(config: PresentationConfig & { jumpPage: (index: number) => void }) {
     super(config)
     this.jumpPage = config.jumpPage
   }
+
   override onNewPageIndex(index: number, origin: "navigation" | "keydown" | "input" | "preview") {
     // If it is triggered by global keydown (left or right arrow),
     // only the focused one should work
     if (origin === "keydown" && this.box && !this.box.focus)
       return
+    if (this.log)
+      this.log("[Presentation] user navigate to", index + 1, `(${origin})`)
     if (0 <= index && index < this.pages.length) {
       this.jumpPage(index)
     } else {

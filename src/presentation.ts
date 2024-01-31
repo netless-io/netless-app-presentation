@@ -239,6 +239,7 @@ export class Presentation implements IDisposable<void> {
     this.contentDOM.classList.toggle(this.c('readonly'), readonly)
     this.footerDOM.classList.toggle(this.c('readonly'), readonly)
     this.pageNumberInputDOM.disabled = readonly
+    this.togglePreview(false)
     this.readonly = readonly
   }
 

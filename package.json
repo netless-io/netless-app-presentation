@@ -4,7 +4,7 @@
   "description": "Netless App for presentation slides (images)",
   "author": "netless",
   "license": "MIT",
-  "repository": "netless-io/app-presentation",
+  "repository": "netless-io/netless-app-presentation",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",

@@ -9,6 +9,11 @@ import { Presentation, type PresentationConfig, type PresentationPage } from "./
 export type Logger = (...data: any[]) => void
 
 export interface PresentationAppOptions {
+  /** Disables user move / scale the image and whiteboard. */
+  disableCameraTransform?: boolean;
+  /** Max scale = `maxCameraScale` * default scale. Not working when `disableCameraTransform` is true. Default: 3 */
+  maxCameraScale?: number;
+  /** Custom logger. Default: `console.log` */
   log?: Logger;
 }
 
@@ -61,6 +66,10 @@ export const NetlessAppPresentation: NetlessApp<{}, unknown, PresentationAppOpti
     const scenePath = context.getInitScenePath()!
 
     const options = context.getAppOptions() || {}
+    if (!(Number.isFinite(options.maxCameraScale) && options.maxCameraScale! > 0)) {
+      console.warn(`[Presentation] maxCameraScale should be a positive number, got ${options.maxCameraScale}`)
+    }
+
     const log = options.log || createLogger(context.getRoom())
     log(`[Presentation] new ${context.appId}`)
 
@@ -75,7 +84,10 @@ export const NetlessAppPresentation: NetlessApp<{}, unknown, PresentationAppOpti
         const scenes = room.entireScenes()[scenePath]
         if (scenes.length < pages.length) {
           // Note: scenes with the same name will be overwritten.
-          room.putScenes(scenePath, pages.map((_, index) => ({ name: String(index + 1) })))
+          room.putScenes(scenePath, pages.map((p, index) => ({
+            name: String(index + 1),
+            ppt: { width: p.width, height: p.height, src: p.src }
+          })))
         }
       }
     }
@@ -102,7 +114,8 @@ export const NetlessAppPresentation: NetlessApp<{}, unknown, PresentationAppOpti
       // "Prepare scenes" may not run correctly if the user suddenly disconnected after adding the app.
       // So here we add the missing pages again if not found. This is rare to happen.
       if (!scenes.some(scene => scene.name === name)) {
-        await context.addPage({ scene: { name } })
+        const p = pages[index]
+        await context.addPage({ scene: { name, ppt: { width: p.width, height: p.height, src: p.src } } })
       }
 
       // Switch to that page.
@@ -146,10 +159,12 @@ export const NetlessAppPresentation: NetlessApp<{}, unknown, PresentationAppOpti
           originX: -width / 2, originY: -height / 2, width, height,
           animationMode: 'immediately' as AnimationMode.Immediately
         })
+        const maxScale = view.camera.scale * (options.disableCameraTransform ? 1 : (options.maxCameraScale || 3))
+        const minScale = view.camera.scale
         view.setCameraBound({
           damping: 1,
-          maxContentMode: () => view.camera.scale,
-          minContentMode: () => view.camera.scale,
+          maxContentMode: () => maxScale,
+          minContentMode: () => minScale,
           centerX: 0, centerY: 0, width, height
         })
       }
@@ -183,7 +198,9 @@ export const NetlessAppPresentation: NetlessApp<{}, unknown, PresentationAppOpti
     app.log = log
 
     context.mountView(app.whiteboardDOM)
-    view.disableCameraTransform = true
+    if (options.disableCameraTransform) {
+      view.disableCameraTransform = true
+    }
     scaleDocsToFit()
     dispose.make(() => {
       view.callbacks.on('onSizeUpdated', scaleDocsToFit)
@@ -327,6 +344,11 @@ class AppPresentation extends Presentation {
   constructor(config: PresentationConfig & { jumpPage: (index: number) => void }) {
     super(config)
     this.jumpPage = config.jumpPage
+    this.image.style.display = 'none'
+  }
+
+  override updateImage() {
+    // Do nothing, the image was set in the whiteboard scene.
   }
 
   override onNewPageIndex(index: number, origin: "navigation" | "keydown" | "input" | "preview") {

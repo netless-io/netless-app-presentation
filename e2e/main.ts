@@ -16,6 +16,16 @@ install(register, {
         console.error(err)
         return src
       }
+    },
+    viewport(page) {
+      // landscape
+      if (page.width > page.height) {
+        return { x: 0, y: 0, width: 1, height: 1 }
+      }
+      // portrait, show upper half
+      else {
+        return { x: 0, y: 0, width: 1, height: 0.5 }
+      }
     }
   }
 })

@@ -8,6 +8,13 @@ import { Presentation, type PresentationConfig, type PresentationPage } from "./
 
 export type Logger = (...data: any[]) => void
 
+interface Viewport {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
 export interface PresentationAppOptions {
   /** Disables user move / scale the image and whiteboard. */
   disableCameraTransform?: boolean;
@@ -17,6 +24,16 @@ export interface PresentationAppOptions {
   log?: Logger;
   /** Custom thumbnail generator. Default is appending `"?x-oss-process=image/resize,l_50"` to `src`. */
   thumbnail?: (src: string) => string;
+  /**
+   * Custom viewport to set on the first time the presentation was added. Default is full page.
+   * Numbers range in 0 to 1 is considered a ratio to multiply the real page size.
+   * Example settings:
+   *
+   * - Full page: `{ x: 0, y: 0, width: 1, height: 1 }`
+   * - Half page: `{ x: 0, y: 0, width: 1, height: 0.5 }`
+   * - Absolute top-left area of the page: `{ x: 0, y: 0, width: 100, height: 100 }`
+   */
+  viewport?: Viewport | ((page: PresentationPage) => Viewport);
 }
 
 export interface PresentationController {
@@ -50,7 +67,7 @@ const createLogger = (room: Room | undefined): Logger => {
   }
 }
 
-export const NetlessAppPresentation: NetlessApp<{}, unknown, PresentationAppOptions, PresentationController> = {
+export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, PresentationController> = {
   kind: "Presentation",
   setup(context) {
     const view = context.getView()
@@ -100,6 +117,7 @@ export const NetlessAppPresentation: NetlessApp<{}, unknown, PresentationAppOpti
     dispose.add(() => log(`[Presentation] dispose ${context.appId}`))
 
     const page$$ = context.createStorage('page', { index: 0 })
+    const view$$ = context.createStorage('view', { uid: "", originX: 0, originY: 0, width: 0, height: 0 })
 
     let lastIndex = -1
     const syncPage = async (index: number) => {
@@ -171,11 +189,48 @@ export const NetlessAppPresentation: NetlessApp<{}, unknown, PresentationAppOpti
           minContentMode: () => minScale,
           centerX: 0, centerY: 0, width, height
         })
+        syncViewFromRemote(true)
+      }
+    }
+
+    const me = context.getRoom()?.uid || context.getDisplayer().observerId + ''
+
+    let throttleSyncView = 0
+    const syncView = () => {
+      if (throttleSyncView > 0) return
+      const { width, height } = app.page() || {}
+      if (width && height && context.getIsWritable()) {
+        const { camera, size } = view
+        const fixedW = Math.min(size.width, size.height * width / height)
+        const fixedH = Math.min(size.height, size.width * height / width)
+        const w = fixedW / camera.scale
+        const h = fixedH / camera.scale
+        const x = camera.centerX - w / 2
+        const y = camera.centerY - h / 2
+        throttleSyncView = setTimeout(() => {
+          throttleSyncView = 0
+          view$$.setState({ uid: me, originX: x, originY: y, width: w, height: h })
+        }, 50)
+      }
+    }
+    dispose.add(() => {
+      clearTimeout(throttleSyncView)
+      throttleSyncView = 0
+    })
+
+    const syncViewFromRemote = (force = false, animate = false) => {
+      const { uid, originX, originY, width, height } = view$$.state
+      if ((force || uid !== me) && width > 0 && height > 0) {
+        view.moveCameraToContain({
+          originX, originY, width, height,
+          animationMode: (animate ? 'continuous' : 'immediately') as AnimationMode
+        })
       }
     }
 
     syncPage(page$$.state.index)
     dispose.add(page$$.addStateChangedListener(() => syncPage(page$$.state.index)))
+    dispose.add(view$$.addStateChangedListener(() => syncViewFromRemote(false, true)))
 
     // Workaround for window-manager also listens to room state and change scene.
     // https://github.com/netless-io/window-manager/blob/5e6b79f/src/AppManager.ts#L666
@@ -210,6 +265,26 @@ export const NetlessAppPresentation: NetlessApp<{}, unknown, PresentationAppOpti
       view.callbacks.on('onSizeUpdated', scaleDocsToFit)
       return () => view.callbacks.off('onSizeUpdated', scaleDocsToFit)
     })
+
+    // Init viewport if provided `viewport`.
+    if (options.viewport && context.isAddApp && app.page()) {
+      const page = app.page()!
+      const viewport = typeof options.viewport === 'function' ? options.viewport(page) : options.viewport
+      const fix = (i: number, x: number) => i == 0 ? i : i <= 1 ? i * x : i
+      view$$.setState({
+        uid: me,
+        originX: fix(viewport.x, page.width) - page.width / 2,
+        originY: fix(viewport.y, page.height) - page.height / 2,
+        width: fix(viewport.width, page.width),
+        height: fix(viewport.height, page.height),
+      })
+    }
+
+    dispose.make(() => {
+      view.callbacks.on('onCameraUpdatedByDevice', syncView)
+      return () => view.callbacks.off('onCameraUpdatedByDevice', syncView)
+    })
+    syncViewFromRemote(true)
 
     dispose.add(context.emitter.on("writableChange", (isWritable: boolean): void => {
       app.setReadonly(!isWritable)

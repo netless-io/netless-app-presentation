@@ -3,7 +3,22 @@ import { register, createFastboard, createUI, dispatchDocsEvent } from '@netless
 import { install } from '../src'
 import { data } from './example'
 
-install(register, { as: 'DocsViewer' })
+install(register, {
+  as: 'DocsViewer',
+  appOptions: {
+    thumbnail(src) {
+      try {
+        const url = new URL(src)
+        // https://www.alibabacloud.com/help/en/oss/user-guide/resize-images-4
+        url.searchParams.set('x-oss-process', 'image/resize,l_100')
+        return url.toString()
+      } catch (err) {
+        console.error(err)
+        return src
+      }
+    }
+  }
+})
 globalThis.dispatchDocsEvent = dispatchDocsEvent
 
 let fastboard = await createFastboard({

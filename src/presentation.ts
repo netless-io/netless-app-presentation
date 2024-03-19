@@ -16,6 +16,7 @@ export interface PresentationPage {
 export interface PresentationConfig {
   readonly pages: PresentationPage[]
   readonly readonly?: boolean
+  readonly thumbnail?: (src: string) => string
 }
 
 /**
@@ -76,6 +77,7 @@ export class Presentation implements IDisposable<void> {
   constructor(config: PresentationConfig) {
     this.pages = config.pages
     this.preload = new Preload(this.pages)
+    if (config.thumbnail) this.thumbnail = config.thumbnail
     this.dispose.add(this.preload)
     this.readonly = config.readonly ?? false
     this.dom = document.createElement('div')
@@ -120,7 +122,7 @@ export class Presentation implements IDisposable<void> {
     const c_previewPageName = this.c('preview-page-name')
     for (let index = 0; index < this.pages.length; ++index) {
       const page = this.pages[index]
-      const previewSRC = page.thumbnail || this.x_oss_process(page.src)
+      const previewSRC = page.thumbnail || this.thumbnail(page.src)
 
       const previewPage = document.createElement('a')
       previewPage.className = `${c_previewPage} ${this.c(`preview-page-${index}`)}`
@@ -294,17 +296,8 @@ export class Presentation implements IDisposable<void> {
     this.preload.touch(this.pageIndex)
   }
 
-  private c(className: string): string {
-    return `${this.namespace}-${className}`
-  }
-
-  private isEditable(el: EventTarget | null): boolean {
-    if (!el) return false
-    const { tagName } = el as HTMLElement
-    return tagName == 'INPUT' || tagName == 'TEXTAREA' || tagName == 'SELECT'
-  }
-
-  private x_oss_process(src: string): string {
+  /** Returns a modified URL that points to the thumbnail image. */
+  thumbnail(src: string): string {
     try {
       const url = new URL(src)
       url.searchParams.set('x-oss-process', 'image/resize,l_50')
@@ -313,5 +306,15 @@ export class Presentation implements IDisposable<void> {
       console.error(err)
       return src
     }
+  }
+
+  private c(className: string): string {
+    return `${this.namespace}-${className}`
+  }
+
+  private isEditable(el: EventTarget | null): boolean {
+    if (!el) return false
+    const { tagName } = el as HTMLElement
+    return tagName == 'INPUT' || tagName == 'TEXTAREA' || tagName == 'SELECT'
   }
 }

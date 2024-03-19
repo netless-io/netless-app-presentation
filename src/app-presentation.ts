@@ -15,6 +15,8 @@ export interface PresentationAppOptions {
   maxCameraScale?: number;
   /** Custom logger. Default: `console.log` */
   log?: Logger;
+  /** Custom thumbnail generator. Default is appending `"?x-oss-process=image/resize,l_50"` to `src`. */
+  thumbnail?: (src: string) => string;
 }
 
 export interface PresentationController {
@@ -66,8 +68,10 @@ export const NetlessAppPresentation: NetlessApp<{}, unknown, PresentationAppOpti
     const scenePath = context.getInitScenePath()!
 
     const options = context.getAppOptions() || {}
-    if (!(Number.isFinite(options.maxCameraScale) && options.maxCameraScale! > 0)) {
+    let maxCameraScale = options.maxCameraScale ?? 3
+    if (!(Number.isFinite(maxCameraScale) && maxCameraScale! > 0)) {
       console.warn(`[Presentation] maxCameraScale should be a positive number, got ${options.maxCameraScale}`)
+      maxCameraScale = 3
     }
 
     const log = options.log || createLogger(context.getRoom())
@@ -159,7 +163,7 @@ export const NetlessAppPresentation: NetlessApp<{}, unknown, PresentationAppOpti
           originX: -width / 2, originY: -height / 2, width, height,
           animationMode: 'immediately' as AnimationMode.Immediately
         })
-        const maxScale = view.camera.scale * (options.disableCameraTransform ? 1 : (options.maxCameraScale || 3))
+        const maxScale = view.camera.scale * (options.disableCameraTransform ? 1 : maxCameraScale)
         const minScale = view.camera.scale
         view.setCameraBound({
           damping: 1,
@@ -192,7 +196,7 @@ export const NetlessAppPresentation: NetlessApp<{}, unknown, PresentationAppOpti
     }))
 
     const box = context.getBox()
-    const app = dispose.add(createPresentation(box, pages, jumpPage, page$$))
+    const app = dispose.add(createPresentation(box, pages, jumpPage, page$$, options.thumbnail))
     app.contentDOM.dataset.appPresentationVersion = __VERSION__
     app.scaleDocsToFit = scaleDocsToFit
     app.log = log
@@ -366,15 +370,16 @@ class AppPresentation extends Presentation {
   }
 }
 
-const createPresentation = (
+function createPresentation(
   box: ReadonlyTeleBox,
   pages: PresentationPage[],
   jumpPage: (index: number) => void,
   page$$: Storage<{ index: number }>,
-) => {
+  thumbnail?: (src: string) => string,
+): AppPresentation {
   box.mountStyles(styles)
 
-  const app = new AppPresentation({ pages, readonly: box.readonly, jumpPage })
+  const app = new AppPresentation({ pages, readonly: box.readonly, jumpPage, thumbnail })
   app.box = box
   box.mountContent(app.contentDOM)
   box.mountFooter(app.footerDOM)
@@ -397,6 +402,10 @@ export interface InstallOptions {
    * @example "DocsViewer"
    */
   as?: string
+  /**
+   * Options to customize the local app (not synced to others).
+   */
+  appOptions?: PresentationAppOptions
 }
 
 /**
@@ -410,5 +419,5 @@ export const install = (register: RegisterFn, options: InstallOptions = {}): Pro
   if (options.as) {
     app = Object.assign({}, app, { kind: options.as })
   }
-  return register({ kind: app.kind, src: app })
+  return register({ kind: app.kind, src: app, appOptions: options.appOptions })
 }

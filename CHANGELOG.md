@@ -1,5 +1,9 @@
 # ChangeLog
 
+## Unreleased
+
+- Added app option `viewport` to customize initial viewport of the view.
+
 ## 0.1.1
 
 - Added `appOptions` to `install()`.

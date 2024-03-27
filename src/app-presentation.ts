@@ -20,7 +20,7 @@ export interface PresentationAppOptions {
   disableCameraTransform?: boolean;
   /** Max scale = `maxCameraScale` * default scale. Not working when `disableCameraTransform` is true. Default: 3 */
   maxCameraScale?: number;
-  /** Custom logger. Default: `console.log` */
+  /** Custom logger. Default: a logger that reports to the whiteboard server. */
   log?: Logger;
   /** Custom thumbnail generator. Default is appending `"?x-oss-process=image/resize,l_50"` to `src`. */
   thumbnail?: (src: string) => string;

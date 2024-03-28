@@ -80,7 +80,7 @@ document.querySelector<HTMLButtonElement>('#btn-add2')!.onclick = async () => {
     title: "a.pdf",
     scenes: [
       {
-        name: "4",
+        name: "a.pdf - 第 1 页",
         ppt: {
           height: 1010,
           src: "https://convertcdn.netless.link/staticConvert/18140800fe8a11eb8cb787b1c376634e/1.png",
@@ -88,7 +88,7 @@ document.querySelector<HTMLButtonElement>('#btn-add2')!.onclick = async () => {
         },
       },
       {
-        name: "5",
+        name: "a.pdf - 第 2 页",
         ppt: {
           height: 1010,
           src: "https://convertcdn.netless.link/staticConvert/18140800fe8a11eb8cb787b1c376634e/2.png",

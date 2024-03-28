@@ -1,6 +1,6 @@
 # ChangeLog
 
-## Unreleased
+## 0.1.2 (2024-03-28)
 
 - Added app option `viewport` to customize initial viewport of the view.
 - Removed the workaround where when the main room scene path changed,

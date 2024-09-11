@@ -73,6 +73,7 @@ export class Presentation implements IDisposable<void> {
   showPreview = false
   pageIndex = 0
   previewLazyload: ILazyLoadInstance | null = null
+  timer: number | null = null
 
   constructor(config: PresentationConfig) {
     this.pages = config.pages
@@ -285,15 +286,22 @@ export class Presentation implements IDisposable<void> {
   }
 
   updateImage() {
-    const page = this.page()
-    if (!page) {
-      this.image.src = ''
-      return
+    if (this.timer) {
+      clearTimeout(this.timer)
     }
-    this.image.width = page.width
-    this.image.height = page.height
-    this.image.src = page.src
-    this.preload.touch(this.pageIndex)
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      this.preload.touch(this.pageIndex).then(() => {
+        const page = this.page()
+        if (!page) {
+          this.image.src = ''
+          return
+        }
+        this.image.width = page.width
+        this.image.height = page.height
+        this.image.src = page.src
+      })
+    }, 200)
   }
 
   /** Returns a modified URL that points to the thumbnail image. */

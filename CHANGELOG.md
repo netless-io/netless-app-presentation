@@ -1,5 +1,9 @@
 # ChangeLog
 
+## 0.1.3 (2024-09-11)
+- Optimize the preload mechanism
+- debounce updateImage to 200ms
+
 ## 0.1.2 (2024-03-28)
 
 - Added app option `viewport` to customize initial viewport of the view.

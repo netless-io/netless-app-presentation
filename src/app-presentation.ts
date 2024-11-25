@@ -341,11 +341,20 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
 
         wb.clearRect(0, 0, pdfWidth, pdfHeight)
         if (scenes.some(scene => scene.name == String(index + 1))) {
-          view.screenshotToCanvas(
-            wb, `${scenePath}/${index + 1}`,
-            wb_canvas.width, wb_canvas.height,
-            { centerX: 0, centerY: 0, scale: Math.min(wb_canvas.width / width, wb_canvas.height / height) },
-          )
+          const camera = { centerX: 0, centerY: 0, scale: Math.min(wb_canvas.width / width, wb_canvas.height / height) };
+          const sPath = `${scenePath}/${index + 1}`;
+          // appliancePlugin is a performance optimization for whiteboard;
+          const windowManger = (context as any).manager.windowManger as any
+          if (windowManger._appliancePlugin) {
+            await windowManger._appliancePlugin.screenshotToCanvasAsync(wb, sPath, wb_canvas.width, wb_canvas.height, camera);
+          } else {
+            view.screenshotToCanvas(
+              wb, sPath,
+              wb_canvas.width, wb_canvas.height,
+              camera,
+            )
+          }
+
           try {
             const wb_url = wb_canvas.toDataURL('image/png')
             const wb_img = document.createElement('img')

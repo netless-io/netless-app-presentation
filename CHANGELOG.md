@@ -1,5 +1,8 @@
 # ChangeLog
 
+## 0.1.4 (2024-11-25)
+- toPdf support show appliancePlugin elements
+
 ## 0.1.3 (2024-09-11)
 - Optimize the preload mechanism
 - debounce updateImage to 200ms

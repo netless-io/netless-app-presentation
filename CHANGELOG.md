@@ -1,5 +1,8 @@
 # ChangeLog
 
+## 0.1.5 (2024-11-25)
+- fix when scenes only one and name is name toString
+
 ## 0.1.4 (2024-11-25)
 - toPdf support show appliancePlugin elements
 

@@ -11,6 +11,7 @@ export interface PresentationPage {
   width: number;
   height: number;
   thumbnail?: string | undefined;
+  name?: string | undefined;
 }
 
 export interface PresentationConfig {

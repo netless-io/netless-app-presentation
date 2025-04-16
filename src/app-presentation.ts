@@ -56,8 +56,8 @@ export interface PresentationController {
 
 export { styles }
 
-const ppt2page = (ppt: SceneDefinition["ppt"]): PresentationPage | null =>
-  ppt ? { width: ppt.width, height: ppt.height, src: ppt.src, thumbnail: ppt.previewURL } : null
+const ppt2page = (ppt: SceneDefinition["ppt"], name?: string): PresentationPage | null =>
+  ppt ? { width: ppt.width, height: ppt.height, src: ppt.src, thumbnail: ppt.previewURL, name } : null
 
 const createLogger = (room: Room | undefined): Logger => {
   if (room && (room as any).logger) {
@@ -74,7 +74,7 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
     if (!view)
       throw new Error("[Presentation]: no whiteboard view, make sure you have added options.scenePath in addApp()")
 
-    const pages = context.getScenes()?.map(({ ppt }) => ppt2page(ppt)).filter(Boolean) as PresentationPage[]
+    const pages = context.getScenes()?.map(({ ppt, name }) => ppt2page(ppt, name)).filter(Boolean) as PresentationPage[]
     if (!pages || pages.length === 0)
       throw new Error("[Presentation]: empty scenes, make sure you have added options.scenes in addApp()")
     if (pages[0].src.startsWith('ppt'))
@@ -102,11 +102,19 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
 
       const room = context.getRoom()
       if (room && room.isWritable) {
-        const scenes = room.entireScenes()[scenePath]
-        if (scenes.length < pages.length) {
-          // Note: scenes with the same name will be overwritten.
+        const scenes = room.entireScenes()[scenePath];
+        for (let i = 0; i < pages.length; i++) {
+          const p = pages[i];
+          const name = p.name ?? String(i + 1);
+          const scene = scenes.find(scene => scene.name == name && scene.ppt)
+          if (scene) {
+            if (scene.ppt && scene.ppt?.src === p.src) {
+              continue;
+            }
+            room.removeScenes(`${scenePath}/${name}`)
+          }
           room.putScenes(scenePath, pages.map((p, index) => ({
-            name: String(index + 1),
+            name: p.name ?? String(index + 1),
             ppt: { width: p.width, height: p.height, src: p.src }
           })))
         }
@@ -131,12 +139,12 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
       const scenes = context.getDisplayer().entireScenes()[scenePath]
       if (!scenes) return
 
-      const name = String(index + 1)
+      const p = pages[index];
+      const name = p.name ?? String(index + 1);
 
       // "Prepare scenes" may not run correctly if the user suddenly disconnected after adding the app.
       // So here we add the missing pages again if not found. This is rare to happen.
       if (!scenes.some(scene => scene.name === name)) {
-        const p = pages[index]
         await context.addPage({ scene: { name, ppt: { width: p.width, height: p.height, src: p.src } } })
       }
 
@@ -161,7 +169,9 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
         return false
       }
 
-      const name = String(index + 1)
+      const p = pages[index];
+      const name = p.name ?? String(index + 1);
+
       if (!scenes.some(scene => scene.name === name)) {
         context.addPage({ scene: { name } })
       }
@@ -332,7 +342,8 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
       })
 
       for (let index = 0; index < pages.length; ++index) {
-        const { width, height, src } = pages[index]
+        const p = pages[index];
+        const { width, height, src } = p;
 
         const url = await base64url(src)
         const img = document.createElement('img')
@@ -340,7 +351,8 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
         stage.drawImage(img, 0, 0)
 
         wb.clearRect(0, 0, pdfWidth, pdfHeight)
-        if (scenes.some(scene => scene.name == String(index + 1))) {
+        const name = p.name ?? String(index + 1)
+        if (scenes.some(scene => scene.name == name)) {
           const camera = { centerX: 0, centerY: 0, scale: Math.min(wb_canvas.width / width, wb_canvas.height / height) };
           const sPath = `${scenePath}/${index + 1}`;
           // appliancePlugin is a performance optimization for whiteboard;

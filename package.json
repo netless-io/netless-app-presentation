@@ -1,6 +1,6 @@
 {
   "name": "@netless/app-presentation",
-  "version": "0.1.5",
+  "version": "0.1.7",
   "description": "Netless App for presentation slides (images)",
   "author": "netless",
   "license": "MIT",
@@ -31,8 +31,8 @@
     "@hyrious/configs": "^0.1.1",
     "@hyrious/dts": "^0.2.1",
     "@hyrious/esbuild-dev": "^0.10.5",
-    "@netless/fastboard": "^0.3.22",
-    "@netless/window-manager": "^0.4.75",
+    "@netless/fastboard": "^1.0.6",
+    "@netless/window-manager": "^1.0.4",
     "@types/node": "^20.11.30",
     "@wopjs/disposable": "^0.1.5",
     "@wopjs/dom": "^0.1.3",

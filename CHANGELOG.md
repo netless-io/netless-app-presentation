@@ -1,5 +1,13 @@
 # ChangeLog
 
+## 0.1.7 (2025-06-10)
+- Added app option `justDocsViewReadonly` to customize initial.
+- Added app result `setDocsViewReadonly(isReadonly:boolean)`. in the write permission, 
+  just set docsView readonly, whiteboard keeps writable.
+  
+- update `@netless/fastboard@^1.0.6`
+- update `@netless/window-manager@^1.0.4`
+
 ## 0.1.5 (2024-11-25)
 - fix when scenes only one and name is name toString
 

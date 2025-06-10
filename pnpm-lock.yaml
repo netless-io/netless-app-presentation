@@ -18,11 +18,11 @@ importers:
         specifier: ^0.10.5
         version: 0.10.5(esbuild@0.20.2)
       '@netless/fastboard':
-        specifier: ^0.3.22
-        version: 0.3.22(@netless/appliance-plugin@1.1.4(@netless/window-manager@0.4.75(jspdf@2.5.1)(white-web-sdk@2.16.48))(white-web-sdk@2.16.48))(@netless/window-manager@0.4.75(jspdf@2.5.1)(white-web-sdk@2.16.48))(jspdf@2.5.1)(white-web-sdk@2.16.48)
+        specifier: ^1.0.6
+        version: 1.0.6(@netless/app-in-mainview-plugin@0.0.9(@netless/window-manager@1.0.4(jspdf@2.5.1)(white-web-sdk@2.16.48))(white-web-sdk@2.16.48))(@netless/appliance-plugin@1.1.4(@netless/window-manager@1.0.4(jspdf@2.5.1)(white-web-sdk@2.16.48))(white-web-sdk@2.16.48))(@netless/window-manager@1.0.4(jspdf@2.5.1)(white-web-sdk@2.16.48))(jspdf@2.5.1)(white-web-sdk@2.16.48)
       '@netless/window-manager':
-        specifier: ^0.4.75
-        version: 0.4.75(jspdf@2.5.1)(white-web-sdk@2.16.48)
+        specifier: ^1.0.4
+        version: 1.0.4(jspdf@2.5.1)(white-web-sdk@2.16.48)
       '@types/node':
         specifier: ^20.11.30
         version: 20.11.30
@@ -230,8 +230,14 @@ packages:
   '@mesh.js/core@1.1.25':
     resolution: {integrity: sha512-Jxn0EGEbADruAVSgpLbX9S6j3GVeat7QvElc+zU8boFI4TyR5MhAMDTKM5VnCnWmExJByS5KN1EHs5tvYocFnA==}
 
-  '@netless/app-slide@0.2.61':
-    resolution: {integrity: sha512-xo2dQT+lLVEA38k3EdbP7855DMAVbZQexjB2RpyXWlRtxqVbUN2tgsNylALqVM7lBkG4V9LSGVZwDhs57cfTIA==}
+  '@netless/app-in-mainview-plugin@0.0.9':
+    resolution: {integrity: sha512-WDtAZdMNB/kEB471kS8PNTgM0+4zW9Qkg49GYaMav1P733A9XUOn3KzYMehZIiKx59H87os201gynzjnVJB0Gw==}
+    peerDependencies:
+      '@netless/window-manager': '>=1.0.3'
+      white-web-sdk: '>= 2.16.52'
+
+  '@netless/app-slide@0.2.73':
+    resolution: {integrity: sha512-vEKNjaj1DkxWihGaoDI6cC/obtWrARqhnY9YuQDDZDchfQMmo5CKzt6Rh3HUEu7EOhunhRTrRYX1mD6Xr4SoxQ==}
     peerDependencies:
       jspdf: 2.5.1
     peerDependenciesMeta:
@@ -247,35 +253,36 @@ packages:
   '@netless/canvas-polyfill@0.0.4':
     resolution: {integrity: sha512-7NzsJrba0R/mq/l10SkIZQwbrNVJyPxZYrjK6xL3Ts732iWAVuS2UB0u3s6iGeUVcqV39A679yva8APWRl4M0A==}
 
-  '@netless/fastboard-core@0.3.22':
-    resolution: {integrity: sha512-0nB5O8oRgHdHFGMXqYbSKgpC1s9PDuFs+59rl+RHy6YANLmMgXSPgY8klt3bLm/QNFg+tiSixK+0IQv8sUNjeA==}
+  '@netless/fastboard-core@1.0.6':
+    resolution: {integrity: sha512-wHTzS8NVPL9SXpkY6OwKfIweYO8uAMYdrryDBNk4RIoCrOBoJLehVDTqxNUKo299cMP6Ew1ytKsGFt/zNti5FQ==}
     peerDependencies:
-      '@netless/appliance-plugin': '>=1.1.4'
-      '@netless/window-manager': '>=0.4.75'
+      '@netless/app-in-mainview-plugin': '>=0.0.9'
+      '@netless/appliance-plugin': '>=1.1.17'
+      '@netless/window-manager': '>=1.0.4'
       jspdf: '>=2.5.1'
-      white-web-sdk: '>=2.16.52'
+      white-web-sdk: '>=2.16.53'
 
-  '@netless/fastboard-ui@0.3.22':
-    resolution: {integrity: sha512-Gf6TGg/RuzjTxMVuNaa0fx0iOoUVTcnq4Qp5c/+NT7oXIFWPZ1BLpM7QncS+/+xey4WMGDfa2JSA002kxTDg9Q==}
+  '@netless/fastboard-ui@1.0.6':
+    resolution: {integrity: sha512-Z788O6uA49Dq/lzGMZ+Osa/Q8OWCQadQajBy/MtGehbDUqMT/kJ8CV2qaNYEVbAnbvQFYd158Iuxj/clrYyhBg==}
     peerDependencies:
-      '@netless/fastboard-core': 0.3.22
+      '@netless/fastboard-core': 1.0.6
 
-  '@netless/fastboard@0.3.22':
-    resolution: {integrity: sha512-Wj9WU0XI6oqHPQL9ir7qvwDNdnoHJEH5iweNm+qZ/bdM8iEqvsLM+BLKFfCj7nrm35ayvKkIBwf7PZWHhDPCCA==}
+  '@netless/fastboard@1.0.6':
+    resolution: {integrity: sha512-dRslouwTYVVmXRaLjYLdTaBBzVa19JmBZXxWloYwz3/NtFIFh1dKuRiRQIitGzxinCLsK7skBUoRHldMgnnESw==}
 
   '@netless/synced-store@2.0.7':
     resolution: {integrity: sha512-E5ukXMTLa0Mlhlv9Rcy3MJSAM5kwiLoXQy42OCSIFdBR8jf0BKbSUXSjnA8J+FZq6UidNtGaadDWjhwlM1z5MA==}
     peerDependencies:
       white-web-sdk: '>= 2.16'
 
-  '@netless/telebox-insider@0.2.28':
-    resolution: {integrity: sha512-UJDCm/f7yjiIaWqbS20LDXfAG6RUxsXSktPDzmEr51MgsevpQ3u241hVlyOpKAXSeTR6B3ioRAKcgflOw5JvTQ==}
+  '@netless/telebox-insider@0.2.31':
+    resolution: {integrity: sha512-ZVbNga6CA8b5Y0MLqOA9o+hVqNSu4x5Xpihi0BXZ4ZS/5V1tuFB0t/wgrlEf0fnYcQEMuAYqxjyoH9IA/0yvBQ==}
 
-  '@netless/window-manager@0.4.75':
-    resolution: {integrity: sha512-ggKuY/ucnNaXMoNHWPAZSd0PKFn47uOGPmHK2zvfbAijRVYsLdB5dyUDaCsvJCqh0b9oe/mmkl0Jfj4dZHEwZw==}
+  '@netless/window-manager@1.0.4':
+    resolution: {integrity: sha512-4z88glPbnNnIue9FazT9oTsntI1OtPqOYmBu0CcaduZg+CIpPOa1o7OpWXgVgS1qlbEyNAxLYedBI3SLqRhl+g==}
     peerDependencies:
       jspdf: 2.5.1
-      white-web-sdk: ^2.16.0
+      white-web-sdk: ^2.16.52
     peerDependenciesMeta:
       jspdf:
         optional: true
@@ -283,12 +290,6 @@ packages:
   '@netless/xml-js@1.6.16':
     resolution: {integrity: sha512-QnSH8y3j3DDEW0S3MalYBmR0opeyaecAkzx0ocKYncMDiOdQkhByJgD7AVhXQqH8bA/PVHU0VFP445AbJq6fDQ==}
     hasBin: true
-
-  '@popmotion/easing@1.0.2':
-    resolution: {integrity: sha512-IkdW0TNmRnWTeWI7aGQIVDbKXPWHVEYdGgd5ZR4SH/Ty/61p63jCjrPxX1XrR7IGkl08bjhJROStD7j+RKgoIw==}
-
-  '@popmotion/popcorn@0.4.4':
-    resolution: {integrity: sha512-jYO/8319fKoNLMlY4ZJPiPu8Ea8occYwRZhxpaNn/kZsK4QG2E7XFlXZMJBsTWDw7I1i0uaqyC4zn1nwEezLzg==}
 
   '@popperjs/core@2.11.8':
     resolution: {integrity: sha512-P1st0aksCrn9sGZhp8GMYwBnQsbvAWsZAX44oXNNvLHGqAOcoVxmjZiohstwQ7SqKnbR47akdNi+uleWD8+g6A==}
@@ -422,9 +423,6 @@ packages:
 
   '@types/retry@0.12.0':
     resolution: {integrity: sha512-wWKOClTTiizcZhXnPY4wikVAwmdYHp8q6DmC+EJUzAMsycb7HB32Kh9RN4+0gExjmPmZSAQjgURXIGATPegAvA==}
-
-  '@types/shallowequal@1.1.5':
-    resolution: {integrity: sha512-8afr1hbNqvZ/FBMY2mcfkkbk7xhlTZN4lVCgQf55YdjUQpWLemmrcvcHg94vjw+ZVIfPa3UZz/sOE6CkaMlDnQ==}
 
   '@videojs/http-streaming@3.9.1':
     resolution: {integrity: sha512-bNKlbs+b4NTyZlU3iLXj2glEHfAErjKqQryeEoDQ8FqnlFHzza7ijhMB+d/5BMrfRyiL2SvKrTDjD1CbH8QOFQ==}
@@ -651,9 +649,6 @@ packages:
   fraction.js@4.3.7:
     resolution: {integrity: sha512-ZsDfxO51wGAXREY55a7la9LScWpwv9RxIrYABrlvOFBlH/ShPnrtsXeuUIfXKKOVicNxQ+o8JTbJvjS4M89yew==}
 
-  framesync@4.1.0:
-    resolution: {integrity: sha512-MmgZ4wCoeVxNbx2xp5hN/zPDCbLSKiDt4BbbslK7j/pM2lg5S0vhTNv1v8BCVb99JPIo6hXBFdwzU7Q4qcAaoQ==}
-
   fsevents@2.3.3:
     resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
@@ -678,9 +673,6 @@ packages:
   has-flag@3.0.0:
     resolution: {integrity: sha512-sKJf1+ceQBr4SMkvQnBDNDtf4TXpVhVGateu0t918bl30FnbE2m4vNLX+VWe/dpjlb+HugGYzW7uQXH98HPEYw==}
     engines: {node: '>=4'}
-
-  hey-listen@1.0.8:
-    resolution: {integrity: sha512-COpmrF2NOg4TBWUJ5UVyaCU2A88wEMkUPK4hNqyCkqHbxT92BbvfjoSozkAIIm6XhicGlJHhFdullInrdhwU8Q==}
 
   html2canvas@1.4.1:
     resolution: {integrity: sha512-fPU6BHNpsyIhr8yyMpTLLxAbkaK8ArIBcmZIRiBLiDhjeqvXolaEmDGmELFuX9I4xDcaKKcJl+TKZLqruBbmWA==}
@@ -929,12 +921,6 @@ packages:
   seedrandom@3.0.5:
     resolution: {integrity: sha512-8OwmbklUNzwezjGInmZ+2clQmExQPvomqjL7LFqOYqtmuxRgQYqOD3mHaU+MvZn5FLUeVxVfQjwLZW/n/JFuqg==}
 
-  shallowequal@1.1.0:
-    resolution: {integrity: sha512-y0m1JoUZSlPAjXVtPPW70aZWfIL/dSP7AFkRnniLCrK/8MDKog3TySTBmckD+RObVxH0v4Tox67+F14PdED2oQ==}
-
-  side-effect-manager@0.1.6:
-    resolution: {integrity: sha512-2AniIPP3EgNjlVSHzukf1v5v8Y3F+j6AWZPKLh+p/AM3FthtQYhBkkGeOYd1yH5USSCvSQ1qRsRVeYDuAjvZ+A==}
-
   side-effect-manager@1.2.2:
     resolution: {integrity: sha512-luMB5SOIKdkMfWaFkPWFkv+OYk93SBeHE+xLkNxqDGW5j+V1MWSEfeT5Jo0vQ+boV2oRdgWRPNT4M+zR5QcLcg==}
 
@@ -968,12 +954,6 @@ packages:
     resolution: {integrity: sha512-R3f198pcvnB+5IpnBlRkphuE9n46WyVl8I39W/ZUTZLz4nqSP/oLYUrcnJrw462Ds8he4YKMov2efsTIw1BDGQ==}
     engines: {node: '>=0.10.0'}
 
-  style-value-types@3.2.0:
-    resolution: {integrity: sha512-ih0mGsrYYmVvdDi++/66O6BaQPRPRMQHoZevNNdMMcPlP/cH28Rnfsqf1UEba/Bwfuw9T8BmIMwbGdzsPwQKrQ==}
-
-  stylefire@7.0.3:
-    resolution: {integrity: sha512-Q0l7NSeFz/OkX+o6/7Zg3VZxSAZeQzQpYomWmIpOehFM/rJNMSLVX5fgg6Q48ut2ETNKwdhm97mPNU643EBCoQ==}
-
   supports-color@5.5.0:
     resolution: {integrity: sha512-QjVjwdXIt408MIiAqCX4oUKsgU2EqAGzs2Ppkm4aQYbjm+ZEWEcW4SfFNTr4uMNZma0ey4f5lgLrkB0aX0QMow==}
     engines: {node: '>=4'}
@@ -1001,9 +981,6 @@ packages:
     resolution: {integrity: sha512-65P7iz6X5yEr1cwcgvQxbbIw7Uk3gOy5dIdtZ4rDveLqhrdJP+Li/Hx6tyK0NEb+2GCyneCMJiGqrADCSNk8sQ==}
     engines: {node: '>=8.0'}
 
-  tslib@1.14.1:
-    resolution: {integrity: sha512-Xni35NKzjgMrwevysHTCArtLDpPvye8zV/0E4EyYn43P7/7qvQwPh9BGkHewbMulVntbigmcT7rdX3BNo9wRJg==}
-
   typed-function@2.1.0:
     resolution: {integrity: sha512-bctQIOqx2iVbWGDGPWwIm18QScpu2XRmkC19D8rQGFsjKSgteq/o1hTZvIG/wuDq8fanpBDrLkLq+aEN/6y5XQ==}
     engines: {node: '>= 10'}
@@ -1028,9 +1005,6 @@ packages:
   uuid@7.0.3:
     resolution: {integrity: sha512-DPSke0pXhTZgoF/d+WSt2QaKMCFSfx7QegxEWT+JOuHF5aWrKEn0G+ztjuJg/gG8/ItK+rbPCD/yNv8yyih6Cg==}
     hasBin: true
-
-  value-enhancer@0.0.8:
-    resolution: {integrity: sha512-ba8Rcyp9ItqlLWoyZVqHGaEdY1tqP1mcbRhlOrCnIrDxdl8rKNH1Rq45syo4IMYNSkwC2oV9xBWcV9dmL14aQg==}
 
   value-enhancer@1.3.2:
     resolution: {integrity: sha512-RC+yfNMwuLZO2iDtHh4dxvtHP00DnSO0VARBkVoxT1eOwMJ/Rs5jKh6nBUcotWncJhjfGGhQE4SUK8goLEC5oQ==}
@@ -1213,13 +1187,20 @@ snapshots:
       tess2: 1.0.0
       xtend: 4.0.2
 
-  '@netless/app-slide@0.2.61(jspdf@2.5.1)':
+  '@netless/app-in-mainview-plugin@0.0.9(@netless/window-manager@1.0.4(jspdf@2.5.1)(white-web-sdk@2.16.48))(white-web-sdk@2.16.48)':
+    dependencies:
+      '@netless/window-manager': 1.0.4(jspdf@2.5.1)(white-web-sdk@2.16.48)
+      eventemitter2: 6.4.9
+      lodash: 4.17.21
+      white-web-sdk: 2.16.48
+
+  '@netless/app-slide@0.2.73(jspdf@2.5.1)':
     optionalDependencies:
       jspdf: 2.5.1
 
-  '@netless/appliance-plugin@1.1.4(@netless/window-manager@0.4.75(jspdf@2.5.1)(white-web-sdk@2.16.48))(white-web-sdk@2.16.48)':
+  '@netless/appliance-plugin@1.1.4(@netless/window-manager@1.0.4(jspdf@2.5.1)(white-web-sdk@2.16.48))(white-web-sdk@2.16.48)':
     dependencies:
-      '@netless/window-manager': 0.4.75(jspdf@2.5.1)(white-web-sdk@2.16.48)
+      '@netless/window-manager': 1.0.4(jspdf@2.5.1)(white-web-sdk@2.16.48)
       eventemitter2: 6.4.9
       lineclip: 1.1.5
       lodash: 4.17.21
@@ -1233,25 +1214,27 @@ snapshots:
 
   '@netless/canvas-polyfill@0.0.4': {}
 
-  '@netless/fastboard-core@0.3.22(@netless/appliance-plugin@1.1.4(@netless/window-manager@0.4.75(jspdf@2.5.1)(white-web-sdk@2.16.48))(white-web-sdk@2.16.48))(@netless/window-manager@0.4.75(jspdf@2.5.1)(white-web-sdk@2.16.48))(jspdf@2.5.1)(white-web-sdk@2.16.48)':
+  '@netless/fastboard-core@1.0.6(@netless/app-in-mainview-plugin@0.0.9(@netless/window-manager@1.0.4(jspdf@2.5.1)(white-web-sdk@2.16.48))(white-web-sdk@2.16.48))(@netless/appliance-plugin@1.1.4(@netless/window-manager@1.0.4(jspdf@2.5.1)(white-web-sdk@2.16.48))(white-web-sdk@2.16.48))(@netless/window-manager@1.0.4(jspdf@2.5.1)(white-web-sdk@2.16.48))(jspdf@2.5.1)(white-web-sdk@2.16.48)':
     dependencies:
-      '@netless/app-slide': 0.2.61(jspdf@2.5.1)
-      '@netless/appliance-plugin': 1.1.4(@netless/window-manager@0.4.75(jspdf@2.5.1)(white-web-sdk@2.16.48))(white-web-sdk@2.16.48)
+      '@netless/app-in-mainview-plugin': 0.0.9(@netless/window-manager@1.0.4(jspdf@2.5.1)(white-web-sdk@2.16.48))(white-web-sdk@2.16.48)
+      '@netless/app-slide': 0.2.73(jspdf@2.5.1)
+      '@netless/appliance-plugin': 1.1.4(@netless/window-manager@1.0.4(jspdf@2.5.1)(white-web-sdk@2.16.48))(white-web-sdk@2.16.48)
       '@netless/synced-store': 2.0.7(white-web-sdk@2.16.48)
-      '@netless/window-manager': 0.4.75(jspdf@2.5.1)(white-web-sdk@2.16.48)
+      '@netless/window-manager': 1.0.4(jspdf@2.5.1)(white-web-sdk@2.16.48)
       jspdf: 2.5.1
       white-web-sdk: 2.16.48
 
-  '@netless/fastboard-ui@0.3.22(@netless/fastboard-core@0.3.22(@netless/appliance-plugin@1.1.4(@netless/window-manager@0.4.75(jspdf@2.5.1)(white-web-sdk@2.16.48))(white-web-sdk@2.16.48))(@netless/window-manager@0.4.75(jspdf@2.5.1)(white-web-sdk@2.16.48))(jspdf@2.5.1)(white-web-sdk@2.16.48))':
+  '@netless/fastboard-ui@1.0.6(@netless/fastboard-core@1.0.6(@netless/app-in-mainview-plugin@0.0.9(@netless/window-manager@1.0.4(jspdf@2.5.1)(white-web-sdk@2.16.48))(white-web-sdk@2.16.48))(@netless/appliance-plugin@1.1.4(@netless/window-manager@1.0.4(jspdf@2.5.1)(white-web-sdk@2.16.48))(white-web-sdk@2.16.48))(@netless/window-manager@1.0.4(jspdf@2.5.1)(white-web-sdk@2.16.48))(jspdf@2.5.1)(white-web-sdk@2.16.48))':
     dependencies:
-      '@netless/fastboard-core': 0.3.22(@netless/appliance-plugin@1.1.4(@netless/window-manager@0.4.75(jspdf@2.5.1)(white-web-sdk@2.16.48))(white-web-sdk@2.16.48))(@netless/window-manager@0.4.75(jspdf@2.5.1)(white-web-sdk@2.16.48))(jspdf@2.5.1)(white-web-sdk@2.16.48)
+      '@netless/fastboard-core': 1.0.6(@netless/app-in-mainview-plugin@0.0.9(@netless/window-manager@1.0.4(jspdf@2.5.1)(white-web-sdk@2.16.48))(white-web-sdk@2.16.48))(@netless/appliance-plugin@1.1.4(@netless/window-manager@1.0.4(jspdf@2.5.1)(white-web-sdk@2.16.48))(white-web-sdk@2.16.48))(@netless/window-manager@1.0.4(jspdf@2.5.1)(white-web-sdk@2.16.48))(jspdf@2.5.1)(white-web-sdk@2.16.48)
       tippy.js: 6.3.7
 
-  '@netless/fastboard@0.3.22(@netless/appliance-plugin@1.1.4(@netless/window-manager@0.4.75(jspdf@2.5.1)(white-web-sdk@2.16.48))(white-web-sdk@2.16.48))(@netless/window-manager@0.4.75(jspdf@2.5.1)(white-web-sdk@2.16.48))(jspdf@2.5.1)(white-web-sdk@2.16.48)':
+  '@netless/fastboard@1.0.6(@netless/app-in-mainview-plugin@0.0.9(@netless/window-manager@1.0.4(jspdf@2.5.1)(white-web-sdk@2.16.48))(white-web-sdk@2.16.48))(@netless/appliance-plugin@1.1.4(@netless/window-manager@1.0.4(jspdf@2.5.1)(white-web-sdk@2.16.48))(white-web-sdk@2.16.48))(@netless/window-manager@1.0.4(jspdf@2.5.1)(white-web-sdk@2.16.48))(jspdf@2.5.1)(white-web-sdk@2.16.48)':
     dependencies:
-      '@netless/fastboard-core': 0.3.22(@netless/appliance-plugin@1.1.4(@netless/window-manager@0.4.75(jspdf@2.5.1)(white-web-sdk@2.16.48))(white-web-sdk@2.16.48))(@netless/window-manager@0.4.75(jspdf@2.5.1)(white-web-sdk@2.16.48))(jspdf@2.5.1)(white-web-sdk@2.16.48)
-      '@netless/fastboard-ui': 0.3.22(@netless/fastboard-core@0.3.22(@netless/appliance-plugin@1.1.4(@netless/window-manager@0.4.75(jspdf@2.5.1)(white-web-sdk@2.16.48))(white-web-sdk@2.16.48))(@netless/window-manager@0.4.75(jspdf@2.5.1)(white-web-sdk@2.16.48))(jspdf@2.5.1)(white-web-sdk@2.16.48))
+      '@netless/fastboard-core': 1.0.6(@netless/app-in-mainview-plugin@0.0.9(@netless/window-manager@1.0.4(jspdf@2.5.1)(white-web-sdk@2.16.48))(white-web-sdk@2.16.48))(@netless/appliance-plugin@1.1.4(@netless/window-manager@1.0.4(jspdf@2.5.1)(white-web-sdk@2.16.48))(white-web-sdk@2.16.48))(@netless/window-manager@1.0.4(jspdf@2.5.1)(white-web-sdk@2.16.48))(jspdf@2.5.1)(white-web-sdk@2.16.48)
+      '@netless/fastboard-ui': 1.0.6(@netless/fastboard-core@1.0.6(@netless/app-in-mainview-plugin@0.0.9(@netless/window-manager@1.0.4(jspdf@2.5.1)(white-web-sdk@2.16.48))(white-web-sdk@2.16.48))(@netless/appliance-plugin@1.1.4(@netless/window-manager@1.0.4(jspdf@2.5.1)(white-web-sdk@2.16.48))(white-web-sdk@2.16.48))(@netless/window-manager@1.0.4(jspdf@2.5.1)(white-web-sdk@2.16.48))(jspdf@2.5.1)(white-web-sdk@2.16.48))
     transitivePeerDependencies:
+      - '@netless/app-in-mainview-plugin'
       - '@netless/appliance-plugin'
       - '@netless/window-manager'
       - jspdf
@@ -1265,19 +1248,12 @@ snapshots:
       value-enhancer: 1.3.2
       white-web-sdk: 2.16.48
 
-  '@netless/telebox-insider@0.2.28':
-    dependencies:
-      '@types/shallowequal': 1.1.5
-      eventemitter3: 4.0.7
-      shallowequal: 1.1.0
-      side-effect-manager: 0.1.6
-      stylefire: 7.0.3
-      value-enhancer: 0.0.8
+  '@netless/telebox-insider@0.2.31': {}
 
-  '@netless/window-manager@0.4.75(jspdf@2.5.1)(white-web-sdk@2.16.48)':
+  '@netless/window-manager@1.0.4(jspdf@2.5.1)(white-web-sdk@2.16.48)':
     dependencies:
       '@juggle/resize-observer': 3.4.0
-      '@netless/telebox-insider': 0.2.28
+      '@netless/telebox-insider': 0.2.31
       emittery: 0.9.2
       lodash: 4.17.21
       p-retry: 4.6.2
@@ -1288,16 +1264,6 @@ snapshots:
       jspdf: 2.5.1
 
   '@netless/xml-js@1.6.16': {}
-
-  '@popmotion/easing@1.0.2': {}
-
-  '@popmotion/popcorn@0.4.4':
-    dependencies:
-      '@popmotion/easing': 1.0.2
-      framesync: 4.1.0
-      hey-listen: 1.0.8
-      style-value-types: 3.2.0
-      tslib: 1.14.1
 
   '@popperjs/core@2.11.8': {}
 
@@ -1390,8 +1356,6 @@ snapshots:
     optional: true
 
   '@types/retry@0.12.0': {}
-
-  '@types/shallowequal@1.1.5': {}
 
   '@videojs/http-streaming@3.9.1(video.js@8.9.0)':
     dependencies:
@@ -1648,10 +1612,6 @@ snapshots:
 
   fraction.js@4.3.7: {}
 
-  framesync@4.1.0:
-    dependencies:
-      hey-listen: 1.0.8
-
   fsevents@2.3.3:
     optional: true
 
@@ -1674,8 +1634,6 @@ snapshots:
 
   has-flag@3.0.0:
     optional: true
-
-  hey-listen@1.0.8: {}
 
   html2canvas@1.4.1:
     dependencies:
@@ -1954,10 +1912,6 @@ snapshots:
 
   seedrandom@3.0.5: {}
 
-  shallowequal@1.1.0: {}
-
-  side-effect-manager@0.1.6: {}
-
   side-effect-manager@1.2.2: {}
 
   simple-swizzle@0.2.2:
@@ -1995,19 +1949,6 @@ snapshots:
 
   strict-uri-encode@1.1.0: {}
 
-  style-value-types@3.2.0:
-    dependencies:
-      hey-listen: 1.0.8
-      tslib: 1.14.1
-
-  stylefire@7.0.3:
-    dependencies:
-      '@popmotion/popcorn': 0.4.4
-      framesync: 4.1.0
-      hey-listen: 1.0.8
-      style-value-types: 3.2.0
-      tslib: 1.14.1
-
   supports-color@5.5.0:
     dependencies:
       has-flag: 3.0.0
@@ -2035,8 +1976,6 @@ snapshots:
     dependencies:
       is-number: 7.0.0
 
-  tslib@1.14.1: {}
-
   typed-function@2.1.0: {}
 
   typescript@5.3.3: {}
@@ -2056,10 +1995,6 @@ snapshots:
     optional: true
 
   uuid@7.0.3: {}
-
-  value-enhancer@0.0.8:
-    dependencies:
-      side-effect-manager: 0.1.6
 
   value-enhancer@1.3.2: {}
 

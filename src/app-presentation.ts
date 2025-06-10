@@ -34,6 +34,9 @@ export interface PresentationAppOptions {
    * - Absolute top-left area of the page: `{ x: 0, y: 0, width: 100, height: 100 }`
    */
   viewport?: Viewport | ((page: PresentationPage) => Viewport);
+
+  /** justDocsViewReadonly is used to set the presentation readonly, it will be used in the presentation, and the presentation will be readonly when the app is initialized */
+  justDocsViewReadonly?: true;
 }
 
 export interface PresentationController {
@@ -52,6 +55,8 @@ export interface PresentationController {
   toPdf(): Promise<{ pdf: ArrayBuffer, title: string } | null>;
 
   log: Logger;
+  /** set the docs view readonly */
+  setDocsViewReadonly: (bol: boolean) => void;
 }
 
 export { styles }
@@ -248,6 +253,10 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
     app.scaleDocsToFit = scaleDocsToFit
     app.log = log
 
+    if (options.justDocsViewReadonly) {
+      app.setDocsViewReadonly(true)
+    }
+
     context.mountView(app.whiteboardDOM)
     if (options.disableCameraTransform) {
       view.disableCameraTransform = true
@@ -397,7 +406,11 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
       }
     }))
 
-    const controller: PresentationController = { app, view, context, jumpPage, prevPage, nextPage, pageState, toPdf, log }
+    const setDocsViewReadonly = (bol: boolean) => {
+      app.setDocsViewReadonly(bol)
+    }
+
+    const controller: PresentationController = { app, view, context, jumpPage, prevPage, nextPage, pageState, toPdf, log, setDocsViewReadonly }
 
     dispose.add(listen(window, 'message', (ev: MessageEvent<"@netless/_presentation_">) => {
       if (ev.data === "@netless/_presentation_") {

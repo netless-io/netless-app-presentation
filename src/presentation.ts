@@ -76,6 +76,8 @@ export class Presentation implements IDisposable<void> {
   previewLazyload: ILazyLoadInstance | null = null
   timer: number | null = null
 
+  justDocsViewReadonly = false;
+
   constructor(config: PresentationConfig) {
     this.pages = config.pages
     this.preload = new Preload(this.pages)
@@ -98,6 +100,10 @@ export class Presentation implements IDisposable<void> {
     this.pageNumberInputDOM = document.createElement('input')
     this.pageNumberInputDOM.className = this.c('page-number-input')
     this.initialize()
+  }
+
+  setDocsViewReadonly(readonly: boolean) {
+    this.justDocsViewReadonly = readonly
   }
 
   initialize() {
@@ -223,7 +229,7 @@ export class Presentation implements IDisposable<void> {
     pageNumber.appendChild(totalPage)
 
     this.dispose.add(listen(window, "keydown", ev => {
-      if (this.readonly || this.isEditable(ev.target)) return
+      if (this.readonly || this.isEditable(ev.target) || this.justDocsViewReadonly) return
       if ((ev.key == 'ArrowUp' || ev.key == 'ArrowLeft') && this.pageIndex > 0)
         this.onNewPageIndex(this.pageIndex - 1, 'keydown')
       else if ((ev.key == 'ArrowDown' || ev.key == 'ArrowRight') && this.pageIndex < this.pages.length - 1)

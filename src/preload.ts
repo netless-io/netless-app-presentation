@@ -1,9 +1,19 @@
 import type { IDisposable } from "@wopjs/disposable";
 import type { PresentationPage } from "./presentation";
 
+export type Subscriber<T> = (value: T) => void;
+export type Unsubscriber = () => void;
+export type Updater<T> = (value: T) => T;
+
+export interface PageIndex<T> {
+  readonly value: T;
+  subscribe(this: void, run: Subscriber<T>): Unsubscriber;
+  reaction(this: void, run: Subscriber<T>): Unsubscriber;
+  dispose(value?: T): void;
+}
+
 export enum ELoadState {
   unloaded,
-  loading,
   loaded,
   error
 }
@@ -15,10 +25,14 @@ export interface IPreloadMapValue {
 
 export class Preload implements IDisposable {
   static maxLinks: number = 5;
-  readonly loadingLinks: Map<number, HTMLLinkElement> = new Map();
+  // 正在加载的链接
+  readonly loadingLinks: Map<number, {
+    link: HTMLLinkElement,
+    isForce: boolean
+  }> = new Map();
+  // 需要预加载的链接集合
   readonly preloadMap = new Map<number, IPreloadMapValue>();
-  readonly waitingLoadSet: Set<number> = new Set();
-  readonly waitinglinks: number[] = [];
+  // 当前触摸的索引
   touchIndex: number = 0;
   preloadSize: number = 0;
   constructor(readonly pages: PresentationPage[]) {
@@ -26,118 +40,87 @@ export class Preload implements IDisposable {
       src: e.src,
       state: ELoadState.unloaded
     }]));
-    this.waitingLoadSet = new Set(pages.map((e,index) => index));
     this.preloadSize = this.preloadMap.size;
-    this.touch(0);
+    this.touch(0, true);
   }
-  async touch(index: number): Promise<ELoadState> {
-    this.touchIndex = index;
-    const value = this.preloadMap.get(index);
-    let state = ELoadState.unloaded;
-    if (value) {
-      state = value.state;
-      if (value.state === ELoadState.unloaded) {
-        if (this.loadingLinks.size) {
-          for (const [i,link] of this.loadingLinks) {
-            this.destroyLink(i, link);
-            this.waitingLoadSet.add(i);
-            const v = this.preloadMap.get(i);
-            if (v) {
-              v.state = ELoadState.unloaded;
-              this.preloadMap.set(i, v);
-            }
-          }
-          for (const i of this.waitinglinks) {
-            this.waitingLoadSet.add(i);
-          }
-          this.waitinglinks.length = 0;
-        }
-        if (this.waitinglinks.includes(index)) {
-          this.waitinglinks.splice(this.waitinglinks.indexOf(index), 1);
-        }
-        state = await new Promise<ELoadState>(resolve => {
-          this.waitingLoadSet.delete(index);
-          this.createLink(index, resolve);
-        })
-      }
+  touch(index: number, force: boolean = false) {
+    if (index >= this.preloadSize) {
+      this.touchIndex = 0;
+    } else {
+      this.touchIndex = index;
     }
-    if (this.waitingLoadSet.size) {
-      this.requestAsyncCallBack(()=>{
-        this.autoTouch();
-      }, 1000)
-    }
-    return state;
-  }
-  private autoTouch(){
-    this.handler();
-    if (this.waitingLoadSet.size === 0) {
-      return;
-    }
-    let nextTouchDelay = 1000;
-    this.touchIndex = (this.touchIndex + 1) % this.preloadSize;
     const value = this.preloadMap.get(this.touchIndex);
-    if (value) {
-      switch (value.state) {
-        case ELoadState.unloaded:
-        case ELoadState.error:
-          if (!this.waitinglinks.includes(this.touchIndex)) {
-            this.waitinglinks.push(this.touchIndex);
-            this.waitingLoadSet.delete(this.touchIndex);
-          }
-          nextTouchDelay = 0;
-          break;
+    if (value && value.state === ELoadState.unloaded) {
+      this.createLink(this.touchIndex, force);
+    }
+    if (this.loadingLinks.size < Preload.maxLinks) {
+      const willLoad = [...this.preloadMap.entries()].find(([i, e]) => i > this.touchIndex && e.state !== ELoadState.loaded);
+      if (willLoad) {
+        this.requestAsyncCallBack(()=>{this.touch(willLoad[0], false)}, 100);
       }
     }
-    this.requestAsyncCallBack(()=>{
-      this.autoTouch();
-    }, nextTouchDelay)
   }
 
-  private createLink(index: number, resolve?:(state:ELoadState)=>void) {
+  private createLink(index: number, force: boolean = false):ELoadState {
     const value = this.preloadMap.get(index);
+    if (force) { 
+      this.destroySomeLink(index);
+    }
     if (value) {
-      const link = document.createElement('link');
-      link.rel = 'preload';
-      link.as = 'image';
-      link.href = value.src;
-      link.dataset.order = index + '';
-      document.head.appendChild(link);
-      link.onload = () => {
-        value.state = ELoadState.loaded;
-        this.preloadMap.set(index, value);
-        document.head.contains(link) && document.head.removeChild(link);
-        this.loadingLinks.delete(index);
-        resolve && resolve(ELoadState.loaded);
-        this.autoTouch();
+      if (value.state === ELoadState.loaded) {
+        return ELoadState.loaded;
       }
-      link.onerror = () => {
-        value.state = ELoadState.error;
-        this.preloadMap.set(index, value);
-        if (!this.waitinglinks.includes(index)) {
-          this.waitinglinks.push(index);
-          this.waitingLoadSet.delete(this.touchIndex);
+      const curlink = this.loadingLinks.get(index);
+      if (curlink) {
+        if (curlink.isForce !== force) {
+          curlink.isForce = force;
+          this.loadingLinks.set(index, curlink);
         }
-        document.head.contains(link) && document.head.removeChild(link);
-        this.loadingLinks.delete(index);
-        resolve && resolve(ELoadState.error);
-        this.autoTouch();
+        return ELoadState.unloaded;
       }
-      this.loadingLinks.set(index, link);
-      value.state = ELoadState.loading;
+      if (this.loadingLinks.size > Preload.maxLinks) {
+        return ELoadState.unloaded;
+      }
+      const linkDom = document.createElement('link');
+      linkDom.rel = 'preload';
+      linkDom.as = 'image';
+      linkDom.href = value.src;
+      linkDom.dataset.order = index + '';
+      document.head.appendChild(linkDom);
+      linkDom.onload = () => {
+        const value = this.preloadMap.get(index);
+        if (value) {
+          value.state = ELoadState.loaded;
+          this.preloadMap.set(index, value);
+          document.head.contains(linkDom) && document.head.removeChild(linkDom);
+          this.loadingLinks.delete(index);
+          this.touch(this.touchIndex + 1, false);
+        }
+      }
+      linkDom.onerror = () => {
+        const value = this.preloadMap.get(index);
+        if (value?.src) {
+          linkDom.href = value.src;
+        }
+      }
+      this.loadingLinks.set(index, {
+        link: linkDom,
+        isForce: force
+      });
+      value.state = ELoadState.unloaded;
       this.preloadMap.set(index, value);
+      return ELoadState.unloaded;
     }
+    return ELoadState.error;
   }
-  private handler() {
-    if(!this.waitinglinks.length) {
-      return;
-    }
-    let i = this.loadingLinks.size;
-    while (i < Preload.maxLinks) {
-      const index = this.waitinglinks.shift();
-      if (index !== undefined) {
-        this.createLink(index);
+
+  private destroySomeLink(excludeIndex?: number) {
+    for (const [index, { link }] of this.loadingLinks) {
+      if (excludeIndex !== undefined && index === excludeIndex) {
+        continue;
       }
-      i++;
+      document.head.contains(link) && document.head.removeChild(link);
+      this.loadingLinks.delete(index);
     }
   }
   private async requestAsyncCallBack (callBack:()=>void, timeout:number):Promise<void> {
@@ -154,16 +137,8 @@ export class Preload implements IDisposable {
       });
       callBack();
   }
-  private destroyLink(index: number, link: HTMLLinkElement) {
-    document.head.contains(link) && document.head.removeChild(link)
-    this.loadingLinks.delete(index)
-  }
   dispose() {
-    for (const [index,link] of this.loadingLinks) {
-      this.destroyLink(index, link);
-    }
+    this.destroySomeLink();
     this.preloadMap.clear();
-    this.waitingLoadSet.clear();
-    this.waitinglinks.length = 0;
   }
 }

@@ -1,12 +1,15 @@
-import type { AnimationMode, AppContext, NetlessApp, ReadonlyTeleBox, Room, SceneDefinition, Storage, View, WindowManager } from "@netless/window-manager"
+import type { AnimationMode, AppContext, AppPayload, NetlessApp, PublicEvent, ReadonlyTeleBox, Room, SceneDefinition, View, WindowManager } from "@netless/window-manager"
 
 import { disposableStore } from '@wopjs/disposable'
 import { listen } from '@wopjs/dom'
 
 import styles from './style.scss?inline'
 import { Presentation, type PresentationConfig, type PresentationPage } from "./presentation";
+import { readable, type Readable } from "./store";
 
 export type Logger = (...data: any[]) => void
+
+const emptySceneName = '$$empty$$'
 
 interface Viewport {
   readonly x: number;
@@ -71,6 +74,18 @@ const createLogger = (room: Room | undefined): Logger => {
     return (...args) => console.log(...args)
   }
 }
+``
+const scenesEqual = (scenes1?: SceneDefinition[], scenes2?: SceneDefinition[]): boolean => {
+  if (!scenes1 || !scenes2) {return false}
+  if (scenes1.length !== scenes2.length) return false;
+  return scenes1.every((scene, index) => {
+    const scene2 = scenes2[index];
+    return scene.name === scene2.name && 
+           scene.ppt?.width === scene2.ppt?.width &&
+           scene.ppt?.height === scene2.ppt?.height &&
+           scene.ppt?.src === scene2.ppt?.src;
+  });
+};
 
 export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, PresentationController> = {
   kind: "Presentation",
@@ -99,45 +114,107 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
     const log = options.log || createLogger(context.getRoom())
     log(`[Presentation] new ${context.appId}`)
 
+    const dispose = disposableStore()
+    dispose.add(() => log(`[Presentation] dispose ${context.appId}`))
+
+    const view$$ = context.createStorage('view', { uid: "", originX: 0, originY: 0, width: 0, height: 0 })
+
+
+    const _addScenePathListener = (
+      name: keyof PublicEvent,
+      listener: any
+    ) => {
+      const windowManger = (context as any).manager.windowManger as WindowManager;
+      windowManger.emitter.on(name, listener)
+      return () => windowManger?.emitter.off(name, listener)
+    }
+
+    const getPageIndex = (view: View) => {
+      const focusScenePath = view.focusScenePath;
+      const name = focusScenePath?.split('/').pop();
+      let _pageIndex = pages.findIndex((page, index) => {
+        const n = page.name ?? String(index + 1);
+        return n === name;
+      });
+      if (_pageIndex === -1) {
+        _pageIndex = 0;
+      }
+      return _pageIndex;
+    }
+
+    let pageIndex = getPageIndex(view);
+    const pageIndex$ = readable<number>(pageIndex, set => {
+      set(pageIndex);
+      return _addScenePathListener("onAppScenePathChange", (payload: AppPayload)=>{
+        const { appId } = payload;
+        if (appId === context.appId) {
+          const _pageIndex = getPageIndex(payload.view);
+          set(_pageIndex)
+        }
+      });
+    });
+
+    dispose.add(() => {
+      pageIndex$.dispose();
+    })
+
     // Prepare scenes.
     // Caution: some user may insert a 500-page PDF.
     if (context.isAddApp) {
       if (pages.length > 100)
         console.warn(`[Presentation]: too many pages (${pages.length}), may cause performance issues`)
 
-      const room = context.getRoom()
+      let redirectResolve: ((bol:boolean) => void) | undefined = undefined;
+      const room = context.getRoom();
       if (room && room.isWritable) {
         const scenes = room.entireScenes()[scenePath];
-        for (let i = 0; i < pages.length; i++) {
-          const p = pages[i];
-          const name = p.name ?? String(i + 1);
-          const scene = scenes.find(scene => scene.name == name && scene.ppt)
-          if (scene) {
-            if (scene.ppt && scene.ppt?.src === p.src) {
-              continue;
-            }
-            room.removeScenes(`${scenePath}/${name}`)
-          }
-          room.putScenes(scenePath, pages.map((p, index) => ({
+        if (pageIndex$.value < 0 || pageIndex$.value >= pages.length) {
+          throw new Error(`[Presentation] Invalid page index: ${pageIndex$.value}, scenes length: ${pages.length}`);
+        }
+        new Promise((resolve) => {
+          const {name, ppt} = scenes[pageIndex$.value];
+          redirectResolve = resolve;
+          const _scenes = pages.map((p, index) => ({
             name: p.name ?? String(index + 1),
             ppt: { width: p.width, height: p.height, src: p.src }
-          })))
-        }
+          }))
+          
+          if (!scenesEqual(scenes, _scenes)) {
+            room.removeScenes(scenePath)
+            room.putScenes(scenePath, _scenes)
+          }
+          if(name === _scenes[pageIndex$.value].name && !ppt){
+            context.addPage({ scene: { name: emptySceneName } }).then(() => {
+              log(`[Presentation] setup setScenePath ${scenePath}/${emptySceneName}`);
+              context.setScenePath(`${scenePath}/${emptySceneName}`).then(()=>{
+                redirectResolve && redirectResolve(true);
+              })
+            });
+          } else {
+            redirectResolve && redirectResolve(false)
+          }
+        }).then(async(bol)=>{
+          await syncPage(pageIndex$.value, (room as any).logger);
+          if (bol) {
+            log(`[Presentation] setup removeScenes ${scenePath}/${emptySceneName}`);
+            room.removeScenes(`${scenePath}/${emptySceneName}`);
+          }
+        });
       }
     }
 
-    const dispose = disposableStore()
-    dispose.add(() => log(`[Presentation] dispose ${context.appId}`))
+    // let lastIndex = -1
 
-    const page$$ = context.createStorage('page', { index: 0 })
-    const view$$ = context.createStorage('view', { uid: "", originX: 0, originY: 0, width: 0, height: 0 })
+    const me = context.getRoom()?.uid || context.getDisplayer().observerId + ''
 
-    let lastIndex = -1
-    const syncPage = async (index: number) => {
-      if (lastIndex !== index) {
-        lastIndex = index
-        context.dispatchAppEvent('pageStateChange', { index, length: pages.length })
-      }
+    let throttleSyncView = 0
+
+    const syncPage = async (index: number, logger?: any) => {
+      // if (lastIndex !== index) {
+      //   lastIndex = index
+      //   console.log('dispatchAppEvent===>pageStateChange', index);
+      //   context.dispatchAppEvent('pageStateChange', { index, length: pages.length })
+      // }
 
       if (!context.getIsWritable()) return
 
@@ -151,6 +228,10 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
       // So here we add the missing pages again if not found. This is rare to happen.
       if (!scenes.some(scene => scene.name === name)) {
         await context.addPage({ scene: { name, ppt: { width: p.width, height: p.height, src: p.src } } })
+      }
+
+      if (logger) {
+        logger.info(`[Presentation] syncPage ${scenePath}/${name}`);
       }
 
       // Switch to that page.
@@ -178,16 +259,16 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
       const name = p.name ?? String(index + 1);
 
       if (!scenes.some(scene => scene.name === name)) {
-        context.addPage({ scene: { name } })
+        context.addPage({ scene: { name, ppt: { width: p.width, height: p.height, src: p.src } } })
       }
 
-      page$$.setState({ index })
+      syncPage(index);
       return true
     }
 
-    const prevPage = () => jumpPage(page$$.state.index - 1)
-    const nextPage = () => jumpPage(page$$.state.index + 1)
-    const pageState = () => ({ index: page$$.state.index, length: pages.length })
+    const prevPage = () => jumpPage(pageIndex$.value - 1)
+    const nextPage = () => jumpPage(pageIndex$.value + 1)
+    const pageState = () => ({ index: pageIndex$.value, length: pages.length })
 
     const scaleDocsToFit = () => {
       const { width, height } = app.page() || {}
@@ -207,10 +288,6 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
         syncViewFromRemote(true)
       }
     }
-
-    const me = context.getRoom()?.uid || context.getDisplayer().observerId + ''
-
-    let throttleSyncView = 0
     const syncView = () => {
       if (throttleSyncView > 0) return
       const { width, height } = app.page() || {}
@@ -243,12 +320,10 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
       }
     }
 
-    syncPage(page$$.state.index)
-    dispose.add(page$$.addStateChangedListener(() => syncPage(page$$.state.index)))
     dispose.add(view$$.addStateChangedListener(() => syncViewFromRemote(false, true)))
 
     const box = context.getBox()
-    const app = dispose.add(createPresentation(box, pages, jumpPage, page$$, options.thumbnail))
+    const app = dispose.add(createPresentation(box, pages, jumpPage, pageIndex$, options.thumbnail))
     app.contentDOM.dataset.appPresentationVersion = __VERSION__
     app.scaleDocsToFit = scaleDocsToFit
     app.log = log
@@ -444,6 +519,7 @@ class AppPresentation extends Presentation {
 
   override updateImage() {
     // Do nothing, the image was set in the whiteboard scene.
+    super.updateImage();
   }
 
   override onNewPageIndex(index: number, origin: "navigation" | "keydown" | "input" | "preview") {
@@ -465,7 +541,7 @@ function createPresentation(
   box: ReadonlyTeleBox,
   pages: PresentationPage[],
   jumpPage: (index: number) => void,
-  page$$: Storage<{ index: number }>,
+  pageIndex$: Readable<number>,
   thumbnail?: (src: string) => string,
 ): AppPresentation {
   box.mountStyles(styles)
@@ -475,10 +551,7 @@ function createPresentation(
   box.mountContent(app.contentDOM)
   box.mountFooter(app.footerDOM)
 
-  app.setPageIndex(page$$.state.index)
-  app.dispose.add(page$$.addStateChangedListener(() => {
-    app.setPageIndex(page$$.state.index)
-  }))
+  app.dispose.add(pageIndex$.subscribe(pageIndex => { app.setPageIndex(pageIndex) }))
 
   return app
 }

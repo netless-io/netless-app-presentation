@@ -11,7 +11,7 @@ export interface PresentationPage {
   width: number;
   height: number;
   thumbnail?: string | undefined;
-  name?: string | undefined;
+  name?: string;
 }
 
 export interface PresentationConfig {
@@ -298,16 +298,15 @@ export class Presentation implements IDisposable<void> {
     }
     this.timer = setTimeout(() => {
       this.timer = null;
-      this.preload.touch(this.pageIndex).then(() => {
-        const page = this.page()
-        if (!page) {
-          this.image.src = ''
-          return
-        }
-        this.image.width = page.width
-        this.image.height = page.height
-        this.image.src = page.src
-      })
+      this.preload.touch(this.pageIndex, true);
+      // const page = this.page()
+      // if (!page) {
+      //   this.image.src = ''
+      //   return
+      // }
+      // this.image.width = page.width
+      // this.image.height = page.height
+      // this.image.src = page.src
     }, 200)
   }
 

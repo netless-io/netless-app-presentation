@@ -6,6 +6,14 @@ import { data } from './example'
 install(register, {
   as: 'DocsViewer',
   appOptions: {
+    useScrollbar: true,
+    debounceSync: true,
+    maxCameraScale: 5,
+    scrollbarEventCallback: {
+      onScrollCameraUpdated: (appid, originScale, scale) => {
+        console.log('onScrollCameraUpdated===>', appid, originScale, scale, Math.round(scale / originScale  * 1000) /1000);
+      }
+    },
     thumbnail(src) {
       try {
         const url = new URL(src)
@@ -17,29 +25,29 @@ install(register, {
         return src
       }
     },
-    viewport(page) {
-      // landscape
-      if (page.width > page.height) {
-        return { x: 0, y: 0, width: 1, height: 1 }
-      }
-      // portrait, show upper half
-      else {
-        return { x: 0, y: 0, width: 1, height: 0.5 }
-      }
-    }
+    // viewport(page) {
+    //   // landscape
+    //   if (page.width > page.height) {
+    //     return { x: 0, y: 0, width: 1, height: 1 }
+    //   }
+    //   // portrait, show upper half
+    //   else {
+    //     return { x: 0, y: 0, width: 1, height: 0.5 }
+    //   }
+    // }
   }
 })
 globalThis.dispatchDocsEvent = dispatchDocsEvent
 
 let fastboard = await createFastboard({
   sdkConfig: {
-    appIdentifier: import.meta.env.VITE_APPID,
+    appIdentifier: import.meta.env.VITE_APPID || "123456789/123456789",
     region: 'cn-hz',
   },
   joinRoom: {
     uid: Math.random().toString(36).slice(2),
-    uuid: import.meta.env.VITE_ROOM_UUID,
-    roomToken: import.meta.env.VITE_ROOM_TOKEN,
+    uuid: import.meta.env.VITE_ROOM_UUID || "cbc67f00169f11f0826bfd782d7d3846",
+    roomToken: import.meta.env.VITE_ROOM_TOKEN || "NETLESSROOM_YWs9VWtNUk92M1JIN2I2Z284dCZleHBpcmVBdD0xNzU5MTIyNzgxMDE3Jm5vbmNlPWNkZTE0NDkwLTljMjktMTFmMC05NmE5LWFiMzg4NjE4OThhZiZyb2xlPTEmc2lnPWI0ODU2MGU2MDI5YTU1OTNjNzgxZjNiYTFhM2E0NzZlNjFiZjk2OTM5ZDNjZjJjODExNjczNDM0MWM5MDkwMmImdXVpZD1jYmM2N2YwMDE2OWYxMWYwODI2YmZkNzgyZDdkMzg0Ng",
   },
 })
 globalThis.fastboard = fastboard

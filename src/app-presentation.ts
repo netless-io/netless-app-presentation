@@ -6,6 +6,7 @@ import { listen } from '@wopjs/dom'
 import styles from './style.scss?inline'
 import { Presentation, type PresentationConfig, type PresentationPage } from "./presentation";
 import { readable, type Readable } from "./store";
+import { Scrollbar, type ScrollbarEventCallback } from "./scrollbar";
 
 export type Logger = (...data: any[]) => void
 
@@ -40,6 +41,11 @@ export interface PresentationAppOptions {
 
   /** justDocsViewReadonly is used to set the presentation readonly, it will be used in the presentation, and the presentation will be readonly when the app is initialized */
   justDocsViewReadonly?: true;
+  /** useScrollbar is used to set the presentation use scrollbar, it will be used in the presentation, and the presentation will be use scrollbar when the app is initialized */
+  useScrollbar?: boolean;
+  /** debounceSync is used to set the presentation debounce sync, it will be used in the presentation, and the presentation will be debounce sync when the app is initialized */
+  debounceSync?: boolean;
+  scrollbarEventCallback?: ScrollbarEventCallback
 }
 
 export interface PresentationController {
@@ -60,6 +66,14 @@ export interface PresentationController {
   log: Logger;
   /** set the docs view readonly */
   setDocsViewReadonly: (bol: boolean) => void;
+  /** set the presentation readonly */
+  setReadonly: (bol: boolean) => void;
+  /** move the camera */
+  moveCamera: (camera: { centerX: number, centerY: number, scale: number }) => void;
+  /** get the origin scale */
+  getOriginScale: () => number;
+  /** get the view scale */
+  getScale: () =>number;
 }
 
 export { styles }
@@ -210,11 +224,6 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
     let throttleSyncView = 0
 
     const syncPage = async (index: number, logger?: any) => {
-      // if (lastIndex !== index) {
-      //   lastIndex = index
-      //   console.log('dispatchAppEvent===>pageStateChange', index);
-      //   context.dispatchAppEvent('pageStateChange', { index, length: pages.length })
-      // }
 
       if (!context.getIsWritable()) return
 
@@ -289,22 +298,29 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
       }
     }
     const syncView = () => {
-      if (throttleSyncView > 0) return
-      const { width, height } = app.page() || {}
-      if (width && height && context.getIsWritable()) {
-        const { camera, size } = view
-        const fixedW = Math.min(size.width, size.height * width / height)
-        const fixedH = Math.min(size.height, size.width * height / width)
-        const w = fixedW / camera.scale
-        const h = fixedH / camera.scale
-        const x = camera.centerX - w / 2
-        const y = camera.centerY - h / 2
-        throttleSyncView = setTimeout(() => {
-          throttleSyncView = 0
-          view$$.setState({ uid: me, originX: x, originY: y, width: w, height: h })
-        }, 50)
+      if (context.getIsWritable()) {
+        if (options.debounceSync) {
+          clearTimeout(throttleSyncView);
+          throttleSyncView = 0;
+        }
+        if (throttleSyncView > 0) return
+        const { width, height } = app.page() || {}
+        if(width && height){
+          throttleSyncView = setTimeout(() => {
+            throttleSyncView = 0
+            const { camera, size } = view;
+            const fixedW = Math.min(size.width, size.height * width / height)
+            const fixedH = Math.min(size.height, size.width * height / width)
+            const w = fixedW / camera.scale
+            const h = fixedH / camera.scale
+            const x = camera.centerX - w / 2
+            const y = camera.centerY - h / 2
+            view$$.setState({ uid: me, originX: x, originY: y, width: w, height: h })
+          }, 50)
+        }
       }
     }
+
     dispose.add(() => {
       clearTimeout(throttleSyncView)
       throttleSyncView = 0
@@ -365,6 +381,45 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
     dispose.add(context.emitter.on("writableChange", (isWritable: boolean): void => {
       app.setReadonly(!isWritable)
     }))
+
+    const getPageSize = () => {
+      const { width, height } = app.page() || {}
+      return { width: width || 0, height: height || 0 }
+    }
+
+    const getOriginScale = () => {
+      const { size } = view;
+      const { width, height } = getPageSize();
+      return Math.min(size.height / height, size.width / width);
+    }
+
+    const getScale =() => {
+      return view.camera.scale
+    }
+
+    const moveCamera = (camera: { centerX: number, centerY: number, scale: number }) => {
+      if (context.getIsWritable()) {
+        view.moveCamera({...camera, animationMode: 'immediately' as AnimationMode});
+        syncView();
+        return;
+      }
+      throw new Error('[Presentation]: moveCamera must be called in writable room')
+    }
+
+    let scrollbar:Scrollbar | undefined;
+    if (options.useScrollbar) {
+      dispose.make(() => {
+        scrollbar = new Scrollbar(app.contentDOM, { 
+          appId: context.appId,
+          getPageSize,
+          getOriginScale,
+          syncView,
+          getWritable: () => context.getIsWritable(),
+          scrollbarEventCallback: options.scrollbarEventCallback
+        }, view)
+        return () => scrollbar?.destroy()
+      })
+    }
 
     context.emitter.on('destroy', () => dispose())
 
@@ -485,7 +540,14 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
       app.setDocsViewReadonly(bol)
     }
 
-    const controller: PresentationController = { app, view, context, jumpPage, prevPage, nextPage, pageState, toPdf, log, setDocsViewReadonly }
+    const setReadonly = (bol: boolean) => {
+      app.setReadonly(bol)
+      if(scrollbar) {
+        scrollbar.setReadonly(bol)
+      }
+    }
+
+    const controller: PresentationController = { app, view, context, jumpPage, prevPage, nextPage, pageState, toPdf, log, setDocsViewReadonly, setReadonly, moveCamera, getOriginScale, getScale }
 
     dispose.add(listen(window, 'message', (ev: MessageEvent<"@netless/_presentation_">) => {
       if (ev.data === "@netless/_presentation_") {

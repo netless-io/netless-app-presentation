@@ -1,5 +1,12 @@
 # ChangeLog
 
+## 0.1.9 beta
+- Feat: add scrollbar
+- Feat: add appOptions: `useClipView` and appResult: `screenshotCurrentPageAsync`、`getPageSize`
+
+## 0.1.8 (2025-06-20)
+- Fix the issue of inconsistent page synchronization between the scene and the app
+
 ## 0.1.7 (2025-06-10)
 - Added app option `justDocsViewReadonly` to customize initial.
 - Added app result `setDocsViewReadonly(isReadonly:boolean)`. in the write permission, 

@@ -69,9 +69,8 @@ export class Scrollbar {
 
     setReadonly(bol: boolean){
         this.readonly = bol;
-        if (this.readonly) {
-            this.destroy()
-        } else {
+        this.destroy()
+        if (!this.readonly) {
             this.init();
         }
     }
@@ -80,17 +79,22 @@ export class Scrollbar {
         if (this.readonly) return;
         const { scale, centerX, centerY } = this.view.camera;
         const originScale = this.option.getOriginScale();
-        const ratio = Math.round(originScale / scale * 1000) / 1000;
-        const scrollX = Math.round(centerX * originScale);
-        const scrollY = Math.round(centerY * originScale);
+        const { width: pageWidth, height: pageHeight } = this.option.getPageSize();
+        const { width: viewWidth, height: viewHeight } = this.view.size;
+        const originScaleX = viewWidth / pageWidth;
+        const originScaleY = viewHeight / pageHeight;
+        const ratioX = Math.min(Math.round(originScaleX / scale * 100) / 100, 1);
+        const ratioY = Math.min(Math.round(originScaleY / scale * 100) / 100, 1);
+        const scrollX = Math.round(centerX * originScaleX);
+        const scrollY = Math.round(centerY * originScaleY);
         if (this.scrollbarX) {
-            this.scrollbarX.style.width = `${ratio * 100}%`;
-            this.scrollbarX.style.display = ratio === 1 ? 'none' : 'block';
+            this.scrollbarX.style.width = `${ratioX * 100}%`;
+            this.scrollbarX.style.display = ratioX === 1 ? 'none' : 'block';
             this.scrollbarX.style.transform = `translateX(${scrollX}px)`;
         }
         if (this.scrollbarY) {
-            this.scrollbarY.style.height = `${ratio * 100}%`;
-            this.scrollbarY.style.display = ratio === 1 ? 'none' : 'block';
+            this.scrollbarY.style.height = `${ratioY * 100}%`;
+            this.scrollbarY.style.display = ratioY === 1 ? 'none' : 'block';
             this.scrollbarY.style.transform = `translateY(${scrollY}px)`;
         }
         this.option.scrollbarEventCallback?.onScrollCameraUpdated?.(this.appId, originScale, scale);
@@ -107,22 +111,26 @@ export class Scrollbar {
     }
 
     getScrollXRange(camera: {scale: number}) {
-        const { width } = this.option.getPageSize();
-        const originScale = this.option.getOriginScale();
+        const { width: pageWidth } = this.option.getPageSize();
+        const { width: viewWidth } = this.view.size;
+        const originScaleX = viewWidth / pageWidth;
+        // const originScale = this.option.getOriginScale();
         const scale = camera.scale;
-        const ratio = Math.round(originScale / scale * 1000) / 1000;
-        const scrollWidth = width * (1-ratio);
+        const ratio = Math.min(Math.round(originScaleX / scale * 100) / 100, 1);
+        const scrollWidth = pageWidth * (1-ratio);
         const minX = -scrollWidth / 2;
         const maxX = scrollWidth / 2;
         return { minX, maxX };
     }
 
     getScrollYRange(camera: {scale: number}) {
-        const { height } = this.option.getPageSize();
-        const originScale = this.option.getOriginScale();
+        const { height: pageHeight } = this.option.getPageSize();
+        const { height: viewHeight } = this.view.size;
+        const originScaleY = viewHeight / pageHeight;
+        // const originScale = this.option.getOriginScale();
         const scale = camera.scale;
-        const ratio = Math.round(originScale / scale * 1000) / 1000;
-        const scrollHeight = height * (1-ratio);
+        const ratio = Math.min(Math.round(originScaleY / scale * 100) / 100, 1);
+        const scrollHeight = pageHeight * (1-ratio);
         const minY = -scrollHeight / 2;
         const maxY = scrollHeight / 2;
         return { minY, maxY };
@@ -131,9 +139,12 @@ export class Scrollbar {
     onDragX = (transformedDrag: {x: number, y: number}) => {
         if (this.cameraCache) {
             const {x} = transformedDrag;
-            const originScale = this.option.getOriginScale();
+            // const originScale = this.option.getOriginScale();
+            const { width: pageWidth } = this.option.getPageSize();
+            const { width: viewWidth } = this.view.size;
+            const originScaleX = viewWidth / pageWidth;
             const { minX, maxX } = this.getScrollXRange(this.cameraCache);
-            const scrollX = Math.round(x / originScale);
+            const scrollX =Math.round(x / originScaleX);
             let centerX = scrollX + this.cameraCache.centerX;
             if (centerX < minX) {
                 centerX = minX;
@@ -151,9 +162,12 @@ export class Scrollbar {
     onDragY = (transformedDrag: {x: number, y: number}) => {
         if(this.cameraCache){
             const {y} = transformedDrag;
-            const originScale = this.option.getOriginScale();
+            // const originScale = this.option.getOriginScale();
+            const { height: pageHeight } = this.option.getPageSize();
+            const { height: viewHeight } = this.view.size;
+            const originScaleY = viewHeight / pageHeight;
             const { minY, maxY } = this.getScrollYRange(this.cameraCache);
-            const scrollY = Math.round(y / originScale);
+            const scrollY = Math.round(y / originScaleY);
             let centerY = scrollY + this.cameraCache.centerY;
             if (centerY < minY) {
                 centerY = minY;
@@ -219,15 +233,27 @@ export class Scrollbar {
 
     destroy() {
         this.view.callbacks.off('onCameraUpdated', this.onCameraUpdated);
-        this.scrollbarX?.remove();
-        this.scrollbarY?.remove();
-        this.scrollbarX = undefined;
-        this.scrollbarY = undefined;
+        if (this.scrollbarX && this.scrollbarContainerX) {
+            this.scrollbarContainerX.removeChild(this.scrollbarX);
+            this.scrollbarX.remove();
+            this.scrollbarContainerX.remove();
+            this.scrollbarX = undefined;
+        }
+        if (this.scrollbarY && this.scrollbarContainerY) {
+            this.scrollbarContainerY.removeChild(this.scrollbarY);
+            this.scrollbarY.remove();
+            this.scrollbarContainerY.remove();
+            this.scrollbarY = undefined;
+        }
+        if (this.draggableX) {
+            this.draggableX.destroy();
+            this.draggableX = undefined;
+        }
+        if (this.draggableY) {
+            this.draggableY.destroy();
+            this.draggableY = undefined;
+        }
 
-        this.draggableX?.destroy();
-        this.draggableY?.destroy();
-        this.draggableX = undefined;
-        this.draggableY = undefined;
     }
 
 }

@@ -68,6 +68,9 @@ let bundle = await rollup.rollup({
         },
         external: Object.keys({
           '@netless/window-manager': '*',
+          '@netless/appliance-plugin': '*',
+          '@netless/fastboard': '*',
+          'white-web-sdk': '*',
           ...peerDependencies,
         })
       })

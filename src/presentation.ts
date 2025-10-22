@@ -90,9 +90,9 @@ export class Presentation implements IDisposable<void> {
     this.contentDOM.className = this.c('content')
     this.previewDOM = document.createElement('div')
     this.previewDOM.className = this.c('preview')
-    this.imageDOM = document.createElement('div')
-    this.imageDOM.className = this.c('image')
-    this.image = document.createElement('img')
+    // this.imageDOM = document.createElement('div')
+    // this.imageDOM.className = this.c('image')
+    // this.image = document.createElement('img')
     this.whiteboardDOM = document.createElement('div')
     this.whiteboardDOM.className = this.c('wb-view')
     this.footerDOM = document.createElement('div')
@@ -166,8 +166,8 @@ export class Presentation implements IDisposable<void> {
       }
     }))
 
-    this.imageDOM.appendChild(this.image)
-    this.contentDOM.appendChild(this.imageDOM)
+    // this.imageDOM.appendChild(this.image)
+    // this.contentDOM.appendChild(this.imageDOM)
     this.updateImage()
 
     this.contentDOM.appendChild(this.whiteboardDOM)

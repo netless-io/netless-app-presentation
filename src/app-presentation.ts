@@ -3,10 +3,11 @@ import type { AnimationMode, AppContext, AppPayload, NetlessApp, PublicEvent, Re
 import { disposableStore } from '@wopjs/disposable'
 import { listen } from '@wopjs/dom'
 
-import styles from './style.scss?inline'
+import styles from './style.scss?inline';
 import { Presentation, type PresentationConfig, type PresentationPage } from "./presentation";
 import { readable, type Readable } from "./store";
 import { Scrollbar, type ScrollbarEventCallback } from "./scrollbar";
+import { debounce } from "lodash";
 
 export type Logger = (...data: any[]) => void
 
@@ -46,6 +47,10 @@ export interface PresentationAppOptions {
   /** debounceSync is used to set the presentation debounce sync, it will be used in the presentation, and the presentation will be debounce sync when the app is initialized */
   debounceSync?: boolean;
   scrollbarEventCallback?: ScrollbarEventCallback
+  /** goToPageByClick is used to set the presentation go to page by click, it will be used in the presentation, and the presentation will be go to page by click when the app is initialized */
+  goToPageByClick?: boolean;
+  /** useClipView is used to set the presentation use clip view, it will be used in the presentation, and the presentation will be use clip view when the app is initialized */
+  useClipView?: boolean;
 }
 
 export interface PresentationController {
@@ -74,9 +79,11 @@ export interface PresentationController {
   getOriginScale: () => number;
   /** get the view scale */
   getScale: () =>number;
+  /** get the page size */
+  getPageSize: () => { width: number, height: number };
+  /** screenshot the current page */
+  screenshotCurrentPageAsync: (context: CanvasRenderingContext2D, width?: number, height?: number) => Promise<void>;
 }
-
-export { styles }
 
 const ppt2page = (ppt: SceneDefinition["ppt"], name?: string): PresentationPage | null =>
   ppt ? { width: ppt.width, height: ppt.height, src: ppt.src, thumbnail: ppt.previewURL, name } : null
@@ -88,7 +95,6 @@ const createLogger = (room: Room | undefined): Logger => {
     return (...args) => console.log(...args)
   }
 }
-``
 const scenesEqual = (scenes1?: SceneDefinition[], scenes2?: SceneDefinition[]): boolean => {
   if (!scenes1 || !scenes2) {return false}
   if (scenes1.length !== scenes2.length) return false;
@@ -338,14 +344,34 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
 
     dispose.add(view$$.addStateChangedListener(() => syncViewFromRemote(false, true)))
 
+    const getPageSize = () => {
+      const { width, height } = app.page() || {}
+      return { width: width || 0, height: height || 0 }
+    }
+
     const box = context.getBox()
-    const app = dispose.add(createPresentation(box, pages, jumpPage, pageIndex$, options.thumbnail))
+    const app = dispose.add(createPresentation(box, pages, jumpPage, pageIndex$, view, options.thumbnail, options.useClipView))
     app.contentDOM.dataset.appPresentationVersion = __VERSION__
     app.scaleDocsToFit = scaleDocsToFit
     app.log = log
 
     if (options.justDocsViewReadonly) {
       app.setDocsViewReadonly(true)
+    }
+
+    const room = context.getRoom();
+    const goToPageByClick = () => {
+      const currentApplianceName = context.getRoom()?.state?.memberState?.currentApplianceName ?? '';
+      if (!app.readonly && currentApplianceName === 'clicker') {
+        nextPage();
+      }
+    }
+
+    if(room && options.goToPageByClick && app.whiteboardDOM) {
+      dispose.make(() => {
+        app.whiteboardDOM.addEventListener('click', goToPageByClick);
+        return () => app.whiteboardDOM.removeEventListener('click', goToPageByClick);
+      })
     }
 
     context.mountView(app.whiteboardDOM)
@@ -376,16 +402,12 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
       view.callbacks.on('onCameraUpdatedByDevice', syncView)
       return () => view.callbacks.off('onCameraUpdatedByDevice', syncView)
     })
+
     syncViewFromRemote(true)
 
     dispose.add(context.emitter.on("writableChange", (isWritable: boolean): void => {
       app.setReadonly(!isWritable)
     }))
-
-    const getPageSize = () => {
-      const { width, height } = app.page() || {}
-      return { width: width || 0, height: height || 0 }
-    }
 
     const getOriginScale = () => {
       const { size } = view;
@@ -395,6 +417,41 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
 
     const getScale =() => {
       return view.camera.scale
+    }
+
+    const screenshotCurrentPageAsync = async (_context: CanvasRenderingContext2D, _width?: number, _height?: number) => {
+      const uuid = room?.calibrationTimestamp?.toString() ?? Date.now().toString();
+
+      const currentPage = pages[pageIndex$.value];
+      if (!currentPage) {
+        throw new Error('[Presentation]: current page not found')
+      }
+      const { width, height, src } = currentPage;
+
+      const img = document.createElement('img')
+      img.width = width;
+      img.height = height;
+      img.crossOrigin = 'Anonymous';
+      await new Promise(resolve => { img.onload = resolve; img.src = src })
+      _context.drawImage(img, 0, 0, width, height, 0, 0, _width || width, _height || height);
+      const currentScenePath = view.focusScenePath;
+      if (!currentScenePath) {
+        throw new Error('[Presentation]: current scene path not found')
+      }
+      const windowManger = context.getWindowManager() as any;
+      if (windowManger._appliancePlugin) {
+        await windowManger._appliancePlugin.screenshotToCanvasAsync(_context, currentScenePath, _width || width, _height || height, {
+          centerX: 0,
+          centerY: 0,
+          scale: _width && _height ? Math.min(_width / width, _height / height) : 1,
+        });
+      } else {
+        await view.screenshotToCanvasAsync(_context, currentScenePath, _width || width, _height || height, {
+          centerX: 0,
+          centerY: 0,
+          scale: _width && _height ? Math.min(_width / width, _height / height) : 1,
+        });
+      }
     }
 
     const moveCamera = (camera: { centerX: number, centerY: number, scale: number }) => {
@@ -493,13 +550,13 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
         const name = p.name ?? String(index + 1)
         if (scenes.some(scene => scene.name == name)) {
           const camera = { centerX: 0, centerY: 0, scale: Math.min(wb_canvas.width / width, wb_canvas.height / height) };
-          const sPath = `${scenePath}/${index + 1}`;
+          const sPath = `${scenePath}/${name}`;
           // appliancePlugin is a performance optimization for whiteboard;
-          const windowManger = (context as any).manager.windowManger as any
+          const windowManger = context.getWindowManager() as any;
           if (windowManger._appliancePlugin) {
-            await windowManger._appliancePlugin.screenshotToCanvasAsync(wb, sPath, wb_canvas.width, wb_canvas.height, camera);
+            await (windowManger as any)._appliancePlugin.screenshotToCanvasAsync(wb, sPath, wb_canvas.width, wb_canvas.height, camera);
           } else {
-            view.screenshotToCanvas(
+            await view.screenshotToCanvasAsync(
               wb, sPath,
               wb_canvas.width, wb_canvas.height,
               camera,
@@ -542,12 +599,15 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
 
     const setReadonly = (bol: boolean) => {
       app.setReadonly(bol)
+      if (options.goToPageByClick) {
+
+      }
       if(scrollbar) {
         scrollbar.setReadonly(bol)
       }
     }
 
-    const controller: PresentationController = { app, view, context, jumpPage, prevPage, nextPage, pageState, toPdf, log, setDocsViewReadonly, setReadonly, moveCamera, getOriginScale, getScale }
+    const controller: PresentationController = { app, view, context, jumpPage, prevPage, nextPage, pageState, toPdf, log, setDocsViewReadonly, setReadonly, moveCamera, getOriginScale, getScale, getPageSize, screenshotCurrentPageAsync }
 
     dispose.add(listen(window, 'message', (ev: MessageEvent<"@netless/_presentation_">) => {
       if (ev.data === "@netless/_presentation_") {
@@ -576,7 +636,7 @@ class AppPresentation extends Presentation {
   constructor(config: PresentationConfig & { jumpPage: (index: number) => void }) {
     super(config)
     this.jumpPage = config.jumpPage
-    this.image.style.display = 'none'
+    // this.image.style.display = 'none'
   }
 
   override updateImage() {
@@ -604,16 +664,43 @@ function createPresentation(
   pages: PresentationPage[],
   jumpPage: (index: number) => void,
   pageIndex$: Readable<number>,
+  view: View,
   thumbnail?: (src: string) => string,
+  useClipView?: boolean,
 ): AppPresentation {
   box.mountStyles(styles)
 
-  const app = new AppPresentation({ pages, readonly: box.readonly, jumpPage, thumbnail })
+  const app = new AppPresentation({ pages, readonly: box.readonly, jumpPage, thumbnail})
   app.box = box
   box.mountContent(app.contentDOM)
   box.mountFooter(app.footerDOM)
 
   app.dispose.add(pageIndex$.subscribe(pageIndex => { app.setPageIndex(pageIndex) }))
+
+  if(useClipView && view){
+    const onCameraUpdatedEffectForMaskView = debounce(() => {
+      const { width: pageWidth, height: pageHeight } = app.page() || {};
+      if(!pageWidth || !pageHeight) {
+        return;
+      }
+      const { scale } = view.camera;
+      const { width, height } = view.size;
+      const pageRatioX = Math.round((1 - (pageWidth * scale / width)) / 2 * 100);
+      const pageRatioY = Math.round((1 - (pageHeight * scale / height)) / 2 * 100);
+      app.whiteboardDOM.style.clipPath = `inset(${pageRatioY}% ${pageRatioX}%)`;
+    }, 50)
+    onCameraUpdatedEffectForMaskView();
+    const onCameraUpdatedEffect = () => {
+      view.callbacks.on("onSizeUpdated", onCameraUpdatedEffectForMaskView)
+      view.callbacks.on("onCameraUpdated", onCameraUpdatedEffectForMaskView)
+      return () => {
+        view.callbacks.off("onCameraUpdated", onCameraUpdatedEffectForMaskView);
+        view.callbacks.off("onSizeUpdated", onCameraUpdatedEffectForMaskView);
+      }
+    }
+    app.dispose.make(onCameraUpdatedEffect)
+  }
+  
 
   return app
 }

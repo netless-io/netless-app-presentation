@@ -1,7 +1,9 @@
 /// <reference types="vite/client" />
 import { register, createFastboard, createUI, dispatchDocsEvent } from '@netless/fastboard'
-import { install } from '../src'
+import { install, type PresentationController } from '../src'
 import { data } from './example'
+import fullWorkerString from '@netless/appliance-plugin/dist/fullWorker.js?raw';
+import subWorkerString from '@netless/appliance-plugin/dist/subWorker.js?raw';
 
 install(register, {
   as: 'DocsViewer',
@@ -9,6 +11,7 @@ install(register, {
     useScrollbar: true,
     debounceSync: true,
     maxCameraScale: 5,
+    useClipView: true,
     scrollbarEventCallback: {
       onScrollCameraUpdated: (appid, originScale, scale) => {
         console.log('onScrollCameraUpdated===>', appid, originScale, scale, Math.round(scale / originScale  * 1000) /1000);
@@ -38,6 +41,10 @@ install(register, {
   }
 })
 globalThis.dispatchDocsEvent = dispatchDocsEvent
+const fullWorkerBlob = new Blob([fullWorkerString], {type: 'text/javascript'});
+const fullWorkerUrl = URL.createObjectURL(fullWorkerBlob);
+const subWorkerBlob = new Blob([subWorkerString], {type: 'text/javascript'});
+const subWorkerUrl = URL.createObjectURL(subWorkerBlob);
 
 let fastboard = await createFastboard({
   sdkConfig: {
@@ -46,9 +53,39 @@ let fastboard = await createFastboard({
   },
   joinRoom: {
     uid: Math.random().toString(36).slice(2),
-    uuid: import.meta.env.VITE_ROOM_UUID || "cbc67f00169f11f0826bfd782d7d3846",
-    roomToken: import.meta.env.VITE_ROOM_TOKEN || "NETLESSROOM_YWs9VWtNUk92M1JIN2I2Z284dCZleHBpcmVBdD0xNzU5MTIyNzgxMDE3Jm5vbmNlPWNkZTE0NDkwLTljMjktMTFmMC05NmE5LWFiMzg4NjE4OThhZiZyb2xlPTEmc2lnPWI0ODU2MGU2MDI5YTU1OTNjNzgxZjNiYTFhM2E0NzZlNjFiZjk2OTM5ZDNjZjJjODExNjczNDM0MWM5MDkwMmImdXVpZD1jYmM2N2YwMDE2OWYxMWYwODI2YmZkNzgyZDdkMzg0Ng",
+    uuid: import.meta.env.VITE_ROOM_UUID || "b34887c0ae7f11f0a8d9339d21b70bad",
+    roomToken: import.meta.env.VITE_ROOM_TOKEN || "NETLESSROOM_YWs9VWtNUk92M1JIN2I2Z284dCZleHBpcmVBdD0xNzYxMTM4Nzk0MjEzJm5vbmNlPWIzNjI1MTUwLWFlN2YtMTFmMC05NmE5LWFiMzg4NjE4OThhZiZyb2xlPTEmc2lnPTIwZGZmY2U3NTZkYzAzNzRjOGIwYmI1MzM1ZjdiYWY2OWM2NjIzZjRiNjdmNzJiNGUyY2EzYzNlZGYxMzliMjYmdXVpZD1iMzQ4ODdjMGFlN2YxMWYwYThkOTMzOWQyMWI3MGJhZA",
   },
+  enableAppliancePlugin: {
+    cdn: {
+        fullWorkerUrl,
+        subWorkerUrl,
+    },
+    extras: {
+      useSimple: true,
+      strokeWidth: {
+        min: 1,
+        max: 32
+      },
+      syncOpt: {
+        interval: 200
+      },
+      cursor: {
+        enable: false,
+        expirationTime: 10000,
+      },
+      bezier: {
+        enable: true,
+        combineUnitTime: 200,
+        maxDrawCount: 180,
+      },
+      textEditor: {
+        showFloatBar: false,
+        canSelectorSwitch: true,
+        rightBoundBreak: true
+      }
+    }
+  }
 })
 globalThis.fastboard = fastboard
 fastboard.manager.onAppEvent('DocsViewer', ev => {
@@ -88,7 +125,7 @@ document.querySelector<HTMLButtonElement>('#btn-add2')!.onclick = async () => {
     title: "a.pdf",
     scenes: [
       {
-        name: "a.pdf - 第 1 页",
+        name: "a.pdf 第 1 页",
         ppt: {
           height: 1010,
           src: "https://convertcdn.netless.link/staticConvert/18140800fe8a11eb8cb787b1c376634e/1.png",
@@ -96,7 +133,7 @@ document.querySelector<HTMLButtonElement>('#btn-add2')!.onclick = async () => {
         },
       },
       {
-        name: "a.pdf - 第 2 页",
+        name: "a.pdf 第 2 页",
         ppt: {
           height: 1010,
           src: "https://convertcdn.netless.link/staticConvert/18140800fe8a11eb8cb787b1c376634e/2.png",
@@ -124,5 +161,36 @@ document.querySelector<HTMLButtonElement>('#btn-pdf')!.onclick = async () => {
       type: '@netless/_request_save_pdf_',
       appId: app.id,
     }, '*')
+  }
+}
+
+document.querySelector<HTMLButtonElement>('#save')!.onclick = async () => {
+  const appid = fastboard.manager.focused;
+  if (!appid) {
+    return;
+  }
+  const app = fastboard.manager.queryOne(appid);
+  if (app && app.kind == 'DocsViewer') {
+    const canves = document.createElement('canvas');
+    const { width, height } = ((app as any).appResult as PresentationController).getPageSize();
+    canves.width = width;
+    canves.height = height;
+    const context = canves.getContext('2d');
+    if (!context) {
+      console.error('failed to get context');
+      return;
+    }
+    await ((app as any).appResult as PresentationController).screenshotCurrentPageAsync(context, width, height);
+    canves.toBlob((blob) => {
+      if (!blob) {
+        alert("context.toBlob() failed!");
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "screenshot.png";
+      a.click();
+    });
   }
 }

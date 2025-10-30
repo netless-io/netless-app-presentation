@@ -454,15 +454,6 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
       }
     }
 
-    const moveCamera = (camera: { centerX: number, centerY: number, scale: number }) => {
-      if (context.getIsWritable()) {
-        view.moveCamera({...camera, animationMode: 'immediately' as AnimationMode});
-        syncView();
-        return;
-      }
-      throw new Error('[Presentation]: moveCamera must be called in writable room')
-    }
-
     let scrollbar:Scrollbar | undefined;
     if (options.useScrollbar) {
       dispose.make(() => {
@@ -476,6 +467,17 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
         }, view)
         return () => scrollbar?.destroy()
       })
+    }
+
+    const moveCamera = (camera: { centerX: number, centerY: number, scale: number }) => {
+      if (context.getIsWritable() && scrollbar) {
+        if (!scrollbar) {
+          throw new Error('[Presentation]: moveCamera must be called when appOptions: useScrollbar is true')
+        }
+        scrollbar.moveCamera(camera);
+        return;
+      }
+      throw new Error('[Presentation]: moveCamera must be called in writable room')
     }
 
     context.emitter.on('destroy', () => dispose())

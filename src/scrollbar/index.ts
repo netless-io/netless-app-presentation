@@ -1,7 +1,7 @@
 import './style.scss?inline';
 import type { View, AnimationMode } from "@netless/window-manager";
 import { makeDraggable } from "./Draggable";
-import { debounce } from 'lodash';
+import { debounce, isNumber } from 'lodash';
 
 export interface ScrollbarOption {
     appId: string;
@@ -254,6 +254,45 @@ export class Scrollbar {
             this.draggableY = undefined;
         }
 
+    }
+
+    moveCamera = (camera: { centerX: number, centerY: number, scale: number }) => {
+        const { centerX, centerY, scale } = camera;
+        const cacheCamera = this.view.camera;
+        const _camera: { centerX?: number, centerY?: number, scale?: number} = {};
+        if(isNumber(centerX)) {
+            const { minX, maxX } = this.getScrollXRange(cacheCamera);
+            let newCenterX = centerX;
+            if (centerX < minX) {
+                newCenterX = minX;
+            } else if (centerX > maxX) {
+                newCenterX = maxX;
+            }
+            _camera.centerX = newCenterX;
+        }
+        if(isNumber(centerY)) {
+            const { minY, maxY } = this.getScrollYRange(cacheCamera);
+            let newCenterY = centerY;
+            if (centerY < minY) {
+                newCenterY = minY;
+            } else if (centerY > maxY) {
+                newCenterY = maxY;
+            }
+            _camera.centerY = newCenterY;
+        }
+        if(isNumber(scale)) {
+            let newScale = scale;
+            const originScale = this.option.getOriginScale();
+            if (scale < originScale) {
+                newScale = originScale;
+            } 
+            _camera.scale = newScale;
+        }
+        this.view.moveCamera({
+            ..._camera,
+            animationMode: 'immediately' as AnimationMode
+        })
+        this.option.syncView();
     }
 
 }

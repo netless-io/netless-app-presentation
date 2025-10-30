@@ -53,8 +53,8 @@ let fastboard = await createFastboard({
   },
   joinRoom: {
     uid: Math.random().toString(36).slice(2),
-    uuid: import.meta.env.VITE_ROOM_UUID || "b34887c0ae7f11f0a8d9339d21b70bad",
-    roomToken: import.meta.env.VITE_ROOM_TOKEN || "NETLESSROOM_YWs9VWtNUk92M1JIN2I2Z284dCZleHBpcmVBdD0xNzYxMTM4Nzk0MjEzJm5vbmNlPWIzNjI1MTUwLWFlN2YtMTFmMC05NmE5LWFiMzg4NjE4OThhZiZyb2xlPTEmc2lnPTIwZGZmY2U3NTZkYzAzNzRjOGIwYmI1MzM1ZjdiYWY2OWM2NjIzZjRiNjdmNzJiNGUyY2EzYzNlZGYxMzliMjYmdXVpZD1iMzQ4ODdjMGFlN2YxMWYwYThkOTMzOWQyMWI3MGJhZA",
+    uuid: import.meta.env.VITE_ROOM_UUID || "cbc67f00169f11f0826bfd782d7d3846",
+    roomToken: import.meta.env.VITE_ROOM_TOKEN || "NETLESSROOM_YWs9VWtNUk92M1JIN2I2Z284dCZleHBpcmVBdD0xNzYxODE2MTAyNzQ5Jm5vbmNlPWFlYmIyMGQwLWI0YTgtMTFmMC05NmE5LWFiMzg4NjE4OThhZiZyb2xlPTEmc2lnPTNhMGIzODUyYTI1NTRiZDQ5YjkwZGE5YWQwYzczYmY0ODZkZTk5MmQwNTc0ZTVhZjc1YzMwYjRmMDA4YTMzNzQmdXVpZD1jYmM2N2YwMDE2OWYxMWYwODI2YmZkNzgyZDdkMzg0Ng",
   },
   enableAppliancePlugin: {
     cdn: {

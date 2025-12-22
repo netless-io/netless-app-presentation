@@ -1,6 +1,6 @@
 # ChangeLog
 
-## 0.1.9 beta
+## 0.1.9
 - Feat: add scrollbar
 - Feat: add appOptions: `useClipView` and appResult: `screenshotCurrentPageAsync`、`getPageSize`
 

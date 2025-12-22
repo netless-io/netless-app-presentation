@@ -1,14 +1,12 @@
 # @netless/app-presentation
 
-[中文](https://github.com/netless-io/netless-app-presentation/blob/main/README-zh.md) 
+一个 [Netless App](https://github.com/netless-io/netless-app)，用于将多张图片作为演示文稿幻灯片展示。
 
-A [Netless App](https://github.com/netless-io/netless-app) that display multiple images as presentation slides.
-
-## Install
+## 安装
 
 <pre>npm add <strong>@netless/app-presentation</strong></pre>
 
-## Usage
+## 使用方法
 
 ```js
 import { register } from "@netless/fastboard"
@@ -17,47 +15,46 @@ import { install } from "@netless/app-presentation"
 install(register, { 
   as: 'DocsViewer',
   appOptions: {
-    // Enable scrollbar feature
+    // 启用滚动条功能
     useScrollbar: true,
-    // Enable clip view feature, only show page content area
+    // 启用裁剪视图功能，只显示页面内容区域
     useClipView: true,
-    // Scrollbar event callbacks
+    // 滚动条事件回调
     scrollbarEventCallback: {
       onScrollCameraUpdated: (appid, originScale, scale) => {
-        console.log('Camera scale updated', appid, scale)
+        console.log('相机缩放已更新', appid, scale)
       },
       onScrollbarDragEnd: () => {
-        console.log('Scrollbar drag ended')
+        console.log('滚动条拖拽已结束')
       }
     }
   }
 })
 ```
 
-### Insert This App Into Room
+### 将应用插入房间
 
-Call [`fastboard.insertDocs()`](https://github.com/netless-io/fastboard#insert-pdf-ppt-and-pptx)
-if you installed this app `{ as: 'DocsViewer' }`.
+如果你以 `{ as: 'DocsViewer' }` 的方式安装了这个应用，请调用 [`fastboard.insertDocs()`](https://github.com/netless-io/fastboard#insert-pdf-ppt-and-pptx)。
 
-<details><summary>Otherwise&hellip;</summary>
+<details><summary>否则&hellip;</summary>
 
 ```js
-// Assume you have got the presentation pages as such data structure
+// 假设你已经获得了演示文稿页面的数据结构
 const data = [
-  // The [preview] field is optional
+  // [preview] 字段是可选的
   { width: 1024, height: 768, url: 'url/to/1.png', preview: 'url/to/1.small.png' },
 ]
 
-// Now call addApp()
+// 现在调用 addApp()
 fastboard.manager.addApp({
   kind: 'Presentation',
   options: {
-    // folder name to mount whiteboard scenes
-    // the same folder name will prevent you from insterting it again
+    // 挂载白板场景的文件夹名称
+    // 相同的文件夹名称将防止你再次插入
     scenePath: `/presentation/foo`,
-    // app window title
+    // 应用窗口标题
     title: 'a.pdf',
-    // whiteboard scenes specification
+    // 白板场景规范
     scenes: data.map((e, i) => ({
       name: String(i + 1),
       ppt: {
@@ -71,17 +68,16 @@ fastboard.manager.addApp({
 })
 ```
 
-Note that if you do not replace the DocsViewer app with `{ as: 'DocsViewer' }`,
-the [`dispatchDocsEvent()`](https://github.com/netless-io/fastboard#control-the-pdfpptx-apps)
-function won't work on the Presentation app. This is because that function only
-handles app whose kind is `DocsViewer` or `Slide`.
+请注意，如果你没有使用 `{ as: 'DocsViewer' }` 替换 DocsViewer 应用，
+[`dispatchDocsEvent()`](https://github.com/netless-io/fastboard#control-the-pdfpptx-apps)
+函数将无法在 Presentation 应用上工作。这是因为该函数只处理类型为 `DocsViewer` 或 `Slide` 的应用。
 
 </details>
 
-### App Options
+### 应用选项
 
 #### `useScrollbar`
-Enable scrollbar feature, providing horizontal and vertical scrollbars for navigation and viewing presentations.
+启用滚动条功能，提供水平和垂直滚动条用于导航和查看演示文稿。
 
 ```js
 install(register, {
@@ -90,10 +86,10 @@ install(register, {
     useScrollbar: true,
     scrollbarEventCallback: {
       onScrollCameraUpdated: (appid, originScale, scale) => {
-        // Triggered when camera scale is updated
+        // 当相机缩放更新时触发
       },
       onScrollbarDragEnd: () => {
-        // Triggered when scrollbar drag ends
+        // 当滚动条拖拽结束时触发
       }
     }
   }
@@ -101,7 +97,7 @@ install(register, {
 ```
 
 #### `useClipView`
-Enable clip view feature, only show page content area, hide content outside the whiteboard area.
+启用裁剪视图功能，只显示页面内容区域，隐藏白板区域外的内容。
 
 ```js
 install(register, {
@@ -112,10 +108,10 @@ install(register, {
 })
 ```
 
-### App Result API
+### 应用结果 API
 
 #### `screenshotCurrentPageAsync(context, width?, height?)`
-Asynchronously screenshot the current page to Canvas context. Supports custom width and height.
+异步截图当前页面到 Canvas 上下文。支持自定义宽度和高度。
 
 ```js
 const app = fastboard.manager.queryOne(appId)
@@ -128,8 +124,12 @@ if (app && app.kind === 'DocsViewer') {
   const ctx = canvas.getContext('2d')
   if (ctx) {
     await controller.screenshotCurrentPageAsync(ctx, width, height)
-    // Use canvas for subsequent operations, such as exporting images
+    // 使用 canvas 进行后续操作，如导出图片
     canvas.toBlob((blob) => {
+      if (!blob) {
+        alert("context.toBlob() 失败！")
+        return
+      }
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -141,33 +141,33 @@ if (app && app.kind === 'DocsViewer') {
 ```
 
 #### `getPageSize()`
-Get the size (width and height) of the current page.
+获取当前页面的尺寸（宽度和高度）。
 
 ```js
 const app = fastboard.manager.queryOne(appId)
 if (app && app.kind === 'DocsViewer') {
   const controller = app.appResult
   const { width, height } = controller.getPageSize()
-  console.log(`Current page size: ${width}x${height}`)
+  console.log(`当前页面尺寸: ${width}x${height}`)
 }
 ```
 
-## Develop
+## 开发
 
-See [Write you a Netless App](https://github.com/netless-io/fastboard/blob/main/docs/en/app.md).
+参见 [编写 Netless App](https://github.com/netless-io/fastboard/blob/main/docs/en/app.md)。
 
-To only develop the UI part, run:
+如果只想开发 UI 部分，运行：
 
 ```bash
 $ pnpm build
 $ pnpm dev
 ```
 
-Then goto http://localhost:5173/ to see the app locally.
+然后访问 http://localhost:5173/ 在本地查看应用。
 
-To develop it in a real whiteboard room, add a file .env.local containing the room's uuid and token,
-then goto http://localhost:5173/e2e/.
+要在真实的白板房间中开发，请添加一个包含房间 uuid 和 token 的 .env.local 文件，
+然后访问 http://localhost:5173/e2e/。
 
-## License
+## 许可证
 
 MIT @ [netless](https://github.com/netless-io)

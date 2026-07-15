@@ -1,7 +1,8 @@
 import './style.scss?inline';
 import type { View, AnimationMode } from "@netless/window-manager";
 import { makeDraggable } from "./Draggable";
-import { debounce, isNumber } from 'lodash';
+import debounce from "lodash/debounce";
+import isNumber from "lodash/isNumber";
 
 export interface ScrollbarOption {
     appId: string;

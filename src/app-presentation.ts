@@ -7,7 +7,7 @@ import styles from './style.scss?inline';
 import { Presentation, type PresentationConfig, type PresentationPage } from "./presentation";
 import { readable, type Readable } from "./store";
 import { Scrollbar, type ScrollbarEventCallback } from "./scrollbar";
-import { debounce } from "lodash";
+import debounce from "lodash/debounce";
 
 export type Logger = (...data: any[]) => void
 

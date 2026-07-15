@@ -7,10 +7,6 @@ settings:
 importers:
 
   .:
-    dependencies:
-      lodash:
-        specifier: ^4.17.21
-        version: 4.17.21
     devDependencies:
       '@hyrious/configs':
         specifier: ^0.1.1
@@ -48,6 +44,9 @@ importers:
       jspdf:
         specifier: ^2.5.1
         version: 2.5.2
+      lodash:
+        specifier: ^4.17.21
+        version: 4.17.21
       rollup:
         specifier: ^4.13.1
         version: 4.52.5

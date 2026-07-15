@@ -1,4 +1,6 @@
 # ChangeLog
+## 0.1.9
+- Fix: devDependencies `lodash`
 
 ## 0.1.9
 - Feat: add scrollbar

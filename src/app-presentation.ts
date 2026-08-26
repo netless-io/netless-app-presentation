@@ -63,6 +63,12 @@ export interface PresentationController {
   prevPage(): boolean;
   /** Returns false if failed to jump */
   nextPage(): boolean;
+  /** Resolves after the whiteboard View has accepted the target scene path. */
+  jumpPageAsync(index: number): Promise<boolean>;
+  /** Resolves after the whiteboard View has accepted the previous scene path. */
+  prevPageAsync(): Promise<boolean>;
+  /** Resolves after the whiteboard View has accepted the next scene path. */
+  nextPageAsync(): Promise<boolean>;
   /** `index` ranges from 0 to `length - 1` */
   pageState(): { index: number, length: number };
 
@@ -125,13 +131,16 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
     const scenePath = context.getInitScenePath()!
 
     const options = context.getAppOptions() || {}
+    const room = context.getRoom()
+    const log = options.log || createLogger(room)
+    const roomLogger = (room as any)?.logger
+    const warn: Logger = (...data) => roomLogger?.warn ? roomLogger.warn(...data) : log(...data)
     let maxCameraScale = options.maxCameraScale ?? 3
     if (!(Number.isFinite(maxCameraScale) && maxCameraScale! > 0)) {
-      console.warn(`[Presentation] maxCameraScale should be a positive number, got ${options.maxCameraScale}`)
+      warn(`[Presentation] maxCameraScale should be a positive number, got ${options.maxCameraScale}`)
       maxCameraScale = 3
     }
 
-    const log = options.log || createLogger(context.getRoom())
     log(`[Presentation] new ${context.appId}`)
 
     const dispose = disposableStore()
@@ -182,10 +191,9 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
     // Caution: some user may insert a 500-page PDF.
     if (context.isAddApp) {
       if (pages.length > 100)
-        console.warn(`[Presentation]: too many pages (${pages.length}), may cause performance issues`)
+        warn(`[Presentation]: too many pages (${pages.length}), may cause performance issues`)
 
       let redirectResolve: ((bol:boolean) => void) | undefined = undefined;
-      const room = context.getRoom();
       if (room && room.isWritable) {
         const scenes = room.entireScenes()[scenePath];
         if (pageIndex$.value < 0 || pageIndex$.value >= pages.length) {
@@ -229,12 +237,12 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
 
     let throttleSyncView = 0
 
-    const syncPage = async (index: number, logger?: any) => {
+    const syncPage = async (index: number, logger?: any): Promise<boolean> => {
 
-      if (!context.getIsWritable()) return
+      if (!context.getIsWritable()) return false
 
       const scenes = context.getDisplayer().entireScenes()[scenePath]
-      if (!scenes) return
+      if (!scenes) return false
 
       const p = pages[index];
       const name = p.name ?? String(index + 1);
@@ -251,38 +259,46 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
 
       // Switch to that page.
       await context.setScenePath(`${scenePath}/${name}`)
+      return true
     }
 
-    const jumpPage = (index: number): boolean => {
+    const canJumpPage = (index: number): boolean => {
       if (!context.getIsWritable()) {
-        console.warn('[Presentation]: no permission, make sure you have test room.isWritable')
+        warn('[Presentation]: no permission, make sure you have test room.isWritable')
         return false
       }
 
       if (!(0 <= index && index < pages.length)) {
-        console.warn(`[Presentation]: page ${index + 1} out of bounds [1, ${pages.length}]`)
+        warn(`[Presentation]: page ${index + 1} out of bounds [1, ${pages.length}]`)
         return false
       }
 
       const scenes = context.getDisplayer().entireScenes()[scenePath]
       if (!scenes) {
-        console.warn(`[Presentation]: no scenes found at ${scenePath}, make sure you have added options.scenePath in addApp()`)
+        warn(`[Presentation]: no scenes found at ${scenePath}, make sure you have added options.scenePath in addApp()`)
         return false
       }
 
-      const p = pages[index];
-      const name = p.name ?? String(index + 1);
+      return true
+    }
 
-      if (!scenes.some(scene => scene.name === name)) {
-        context.addPage({ scene: { name, ppt: { width: p.width, height: p.height, src: p.src } } })
-      }
+    const jumpPage = (index: number): boolean => {
+      if (!canJumpPage(index)) return false
 
-      syncPage(index);
+      void syncPage(index).catch(error => {
+        warn('[Presentation]: failed to sync page', error)
+      })
       return true
     }
 
     const prevPage = () => jumpPage(pageIndex$.value - 1)
     const nextPage = () => jumpPage(pageIndex$.value + 1)
+    const jumpPageAsync = async (index: number): Promise<boolean> => {
+      if (!canJumpPage(index)) return false
+      return syncPage(index)
+    }
+    const prevPageAsync = () => jumpPageAsync(pageIndex$.value - 1)
+    const nextPageAsync = () => jumpPageAsync(pageIndex$.value + 1)
     const pageState = () => ({ index: pageIndex$.value, length: pages.length })
 
     const scaleDocsToFit = () => {
@@ -354,12 +370,12 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
     app.contentDOM.dataset.appPresentationVersion = __VERSION__
     app.scaleDocsToFit = scaleDocsToFit
     app.log = log
+    app.warn = warn
 
     if (options.justDocsViewReadonly) {
       app.setDocsViewReadonly(true)
     }
 
-    const room = context.getRoom();
     const goToPageByClick = () => {
       const currentApplianceName = context.getRoom()?.state?.memberState?.currentApplianceName ?? '';
       if (!app.readonly && currentApplianceName === 'clicker') {
@@ -571,7 +587,7 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
             await new Promise(resolve => { wb_img.onload = resolve; wb_img.src = wb_url })
             stage.drawImage(wb_img, 0, 0, pdfWidth, pdfHeight)
           } catch (err) {
-            console.warn(err)
+            warn(err)
           }
         }
 
@@ -591,7 +607,7 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
 
     dispose.add(listen(window, 'message', (ev: MessageEvent<{ appId: string, type: "@netless/_request_save_pdf_" }>) => {
       if (ev.data && ev.data.type == '@netless/_request_save_pdf_' && ev.data.appId == context.appId) {
-        toPdf().catch(err => { console.warn(err); reportProgress(100, null) })
+        toPdf().catch(err => { warn(err); reportProgress(100, null) })
       }
     }))
 
@@ -609,7 +625,7 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
       }
     }
 
-    const controller: PresentationController = { app, view, context, jumpPage, prevPage, nextPage, pageState, toPdf, log, setDocsViewReadonly, setReadonly, moveCamera, getOriginScale, getScale, getPageSize, screenshotCurrentPageAsync }
+    const controller: PresentationController = { app, view, context, jumpPage, prevPage, nextPage, jumpPageAsync, prevPageAsync, nextPageAsync, pageState, toPdf, log, setDocsViewReadonly, setReadonly, moveCamera, getOriginScale, getScale, getPageSize, screenshotCurrentPageAsync }
 
     dispose.add(listen(window, 'message', (ev: MessageEvent<"@netless/_presentation_">) => {
       if (ev.data === "@netless/_presentation_") {
@@ -631,6 +647,7 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
  */
 class AppPresentation extends Presentation {
   log?: Logger;
+  warn?: Logger;
   box?: ReadonlyTeleBox;
   scaleDocsToFit?: () => void;
   readonly jumpPage: (index: number) => void
@@ -656,7 +673,7 @@ class AppPresentation extends Presentation {
     if (0 <= index && index < this.pages.length) {
       this.jumpPage(index)
     } else {
-      console.warn(`[Presentation]: page index ${index} out of bounds [0, ${this.pages.length - 1}]`)
+      this.warn?.(`[Presentation]: page index ${index} out of bounds [0, ${this.pages.length - 1}]`)
     }
   }
 }

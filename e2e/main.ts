@@ -8,9 +8,10 @@ import subWorkerString from '@netless/appliance-plugin/dist/subWorker.js?raw';
 install(register, {
   as: 'DocsViewer',
   appOptions: {
+    disableDeviceCameraTransform: true,
     useScrollbar: true,
     debounceSync: true,
-    maxCameraScale: 5,
+    maxCameraScale: 4,
     useClipView: true,
     scrollbarEventCallback: {
       onScrollCameraUpdated: (appid, originScale, scale) => {
@@ -100,6 +101,49 @@ fastboard.manager.emitter.on('appsChange', (apps: string[]) => {
 let ui = createUI(fastboard, document.querySelector('#whiteboard')!)
 globalThis.ui = ui
 
+let lastPresentationAppId: string | undefined
+
+const getPresentationController = (): PresentationController | undefined => {
+  const appIds = [
+    fastboard.manager.focused,
+    lastPresentationAppId,
+    ...fastboard.manager.queryAll().map(app => app.id).reverse(),
+  ]
+  for (const appId of appIds) {
+    if (!appId) continue
+    const controller = fastboard.manager.queryOne(appId)?.appResult as unknown as PresentationController | undefined
+    if (controller && typeof controller.getScale === 'function') return controller
+  }
+}
+
+const updateCameraStatus = () => {
+  const controller = getPresentationController()
+  const status = document.querySelector<HTMLOutputElement>('#camera-status')!
+  if (!controller) {
+    status.value = 'No focused Presentation'
+    return
+  }
+  const originScale = controller.getOriginScale()
+  const actualScale = controller.getScale()
+  status.value = `origin=${originScale.toFixed(4)}, actual=${actualScale.toFixed(4)}, ratio=${(actualScale / originScale).toFixed(3)}x`
+}
+
+const scalePage = (scale: number) => {
+  const controller = getPresentationController()
+  if (!controller) return updateCameraStatus()
+  controller.moveCamera({
+    centerX: 0,
+    centerY: 0,
+    scale: controller.getOriginScale() * scale,
+  })
+  requestAnimationFrame(updateCameraStatus)
+}
+
+document.querySelector<HTMLButtonElement>('#btn-scale-1')!.onclick = () => scalePage(1)
+document.querySelector<HTMLButtonElement>('#btn-scale-2')!.onclick = () => scalePage(2)
+document.querySelector<HTMLButtonElement>('#btn-scale-4')!.onclick = () => scalePage(4)
+document.querySelector<HTMLButtonElement>('#btn-read-scale')!.onclick = updateCameraStatus
+
 document.querySelector<HTMLButtonElement>('#btn-add')!.onclick = async () => {
   const r = await data
   if ('err' in r) return console.error(r.err);
@@ -115,13 +159,15 @@ document.querySelector<HTMLButtonElement>('#btn-add')!.onclick = async () => {
     type: 'static',
     convertedPercentage: 100,
   })
+  lastPresentationAppId = appId
   console.log('insertDocs() =>', appId)
+  requestAnimationFrame(updateCameraStatus)
 }
 
 document.querySelector<HTMLButtonElement>('#btn-add2')!.onclick = async () => {
   const appId = await fastboard.insertDocs({
     fileType: "pdf",
-    scenePath: `/pdf/18140800fe8a11eb8cb787b1c376634e`,
+    scenePath: `/pdf/camera-scale-validation-${Date.now()}`,
     title: "a.pdf",
     scenes: [
       {
@@ -142,7 +188,9 @@ document.querySelector<HTMLButtonElement>('#btn-add2')!.onclick = async () => {
       },
     ],
   });
+  lastPresentationAppId = appId
   console.log('insertDocs() =>', appId)
+  requestAnimationFrame(updateCameraStatus)
 }
 
 document.querySelector<HTMLButtonElement>('#btn-pdf')!.onclick = async () => {

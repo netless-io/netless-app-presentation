@@ -80,6 +80,32 @@ handles app whose kind is `DocsViewer` or `Slide`.
 
 ### App Options
 
+#### `disableDeviceCameraTransform`
+
+Disable camera transforms initiated by local device input, such as mouse-wheel and touch gestures,
+without changing the camera bound used by programmatic camera operations:
+
+```js
+const manager = await WindowManager.mount({
+  room,
+  container,
+  builtinAppOptions: {
+    Presentation: {
+      disableDeviceCameraTransform: true,
+    },
+  },
+})
+```
+
+This option is local and is not synchronized to other clients. Do not enable the legacy
+`disableCameraTransform` option at the same time because it intentionally locks the camera bound
+to the fitted page scale.
+
+`useScrollbar` and `maxCameraScale` are independent options. `useScrollbar` is required by the
+Presentation controller's programmatic `moveCamera` operation. `maxCameraScale` only controls its
+upper scaling bound and defaults to `3`; set it to `4` only when the application needs
+`scalePage({ scale: 4 })`.
+
 #### `useScrollbar`
 Enable scrollbar feature, providing horizontal and vertical scrollbars for navigation and viewing presentations.
 

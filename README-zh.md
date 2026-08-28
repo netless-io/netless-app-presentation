@@ -76,6 +76,30 @@ fastboard.manager.addApp({
 
 ### 应用选项
 
+#### `disableDeviceCameraTransform`
+
+禁止鼠标滚轮、触摸手势等本地设备输入改变相机，但不改变程序化相机操作使用的
+CameraBound：
+
+```js
+const manager = await WindowManager.mount({
+  room,
+  container,
+  builtinAppOptions: {
+    Presentation: {
+      disableDeviceCameraTransform: true,
+    },
+  },
+})
+```
+
+该配置仅在本地客户端生效，不会同步给其他客户端。不要同时启用旧的
+`disableCameraTransform`，因为旧配置会按原有语义将 CameraBound 锁定到页面适配缩放。
+
+`useScrollbar` 和 `maxCameraScale` 是相互独立的配置。Presentation Controller 的程序化
+`moveCamera` 要求启用 `useScrollbar`；`maxCameraScale` 只控制程序化缩放上限，默认值为
+`3`，只有业务需要调用 `scalePage({ scale: 4 })` 时才需要设为 `4`。
+
 #### `useScrollbar`
 启用滚动条功能，提供水平和垂直滚动条用于导航和查看演示文稿。
 

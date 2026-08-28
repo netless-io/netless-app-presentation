@@ -1,0 +1,34 @@
+import assert from "node:assert/strict"
+import test from "node:test"
+
+import { getCameraScaleRange, shouldDisableDeviceCameraTransform } from "../src/camera-options"
+
+test("legacy disableCameraTransform keeps the fit-scale camera bound", () => {
+  assert.deepEqual(getCameraScaleRange(0.5, 4, true), {
+    minScale: 0.5,
+    maxScale: 0.5,
+  })
+  assert.equal(shouldDisableDeviceCameraTransform({ disableCameraTransform: true }), true)
+})
+
+test("disableDeviceCameraTransform preserves programmatic 2x and 4x scaling", () => {
+  const range = getCameraScaleRange(0.5, 4, false)
+
+  assert.equal(shouldDisableDeviceCameraTransform({ disableDeviceCameraTransform: true }), true)
+  assert.equal(Math.min(0.5 * 2, range.maxScale), 1)
+  assert.equal(Math.min(0.5 * 4, range.maxScale), 2)
+})
+
+test("legacy camera bound wins when both options are enabled", () => {
+  assert.deepEqual(getCameraScaleRange(0.5, 4, true), {
+    minScale: 0.5,
+    maxScale: 0.5,
+  })
+  assert.equal(
+    shouldDisableDeviceCameraTransform({
+      disableCameraTransform: true,
+      disableDeviceCameraTransform: true,
+    }),
+    true
+  )
+})

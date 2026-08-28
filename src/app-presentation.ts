@@ -7,6 +7,7 @@ import styles from './style.scss?inline';
 import { Presentation, type PresentationConfig, type PresentationPage } from "./presentation";
 import { readable, type Readable } from "./store";
 import { Scrollbar, type ScrollbarEventCallback } from "./scrollbar";
+import { getCameraScaleRange, shouldDisableDeviceCameraTransform } from "./camera-options";
 import debounce from "lodash/debounce";
 
 export type Logger = (...data: any[]) => void
@@ -23,6 +24,8 @@ interface Viewport {
 export interface PresentationAppOptions {
   /** Disables user move / scale the image and whiteboard. */
   disableCameraTransform?: boolean;
+  /** Disables camera transforms from local device input without restricting programmatic scaling. */
+  disableDeviceCameraTransform?: boolean;
   /** Max scale = `maxCameraScale` * default scale. Not working when `disableCameraTransform` is true. Default: 3 */
   maxCameraScale?: number;
   /** Custom logger. Default: a logger that reports to the whiteboard server. */
@@ -308,8 +311,11 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
           originX: -width / 2, originY: -height / 2, width, height,
           animationMode: 'immediately' as AnimationMode.Immediately
         })
-        const maxScale = view.camera.scale * (options.disableCameraTransform ? 1 : maxCameraScale)
-        const minScale = view.camera.scale
+        const { minScale, maxScale } = getCameraScaleRange(
+          view.camera.scale,
+          maxCameraScale,
+          options.disableCameraTransform
+        )
         view.setCameraBound({
           damping: 1,
           maxContentMode: () => maxScale,
@@ -391,7 +397,7 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
     }
 
     context.mountView(app.whiteboardDOM)
-    if (options.disableCameraTransform) {
+    if (shouldDisableDeviceCameraTransform(options)) {
       view.disableCameraTransform = true
     }
     scaleDocsToFit()

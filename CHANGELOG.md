@@ -1,4 +1,9 @@
 # ChangeLog
+
+## Unreleased
+
+- Add `disableDeviceCameraTransform` to disable local device camera input without restricting programmatic scaling up to `maxCameraScale`.
+
 ## 0.1.9
 - Fix: devDependencies `lodash`
 

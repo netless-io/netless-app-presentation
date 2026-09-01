@@ -9,10 +9,10 @@ install(register, {
   as: 'DocsViewer',
   appOptions: {
     disableDeviceCameraTransform: true,
-    useScrollbar: true,
+    useScrollbar: false,
     debounceSync: true,
     maxCameraScale: 4,
-    useClipView: true,
+    useClipView: false,
     scrollbarEventCallback: {
       onScrollCameraUpdated: (appid, originScale, scale) => {
         console.log('onScrollCameraUpdated===>', appid, originScale, scale, Math.round(scale / originScale  * 1000) /1000);
@@ -63,28 +63,7 @@ let fastboard = await createFastboard({
         subWorkerUrl,
     },
     extras: {
-      useSimple: true,
-      strokeWidth: {
-        min: 1,
-        max: 32
-      },
-      syncOpt: {
-        interval: 200
-      },
-      cursor: {
-        enable: false,
-        expirationTime: 10000,
-      },
-      bezier: {
-        enable: true,
-        combineUnitTime: 200,
-        maxDrawCount: 180,
-      },
-      textEditor: {
-        showFloatBar: false,
-        canSelectorSwitch: true,
-        rightBoundBreak: true
-      }
+      useSimple: true
     }
   }
 })

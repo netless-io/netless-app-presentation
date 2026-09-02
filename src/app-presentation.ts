@@ -12,6 +12,16 @@ import debounce from "lodash/debounce";
 
 export type Logger = (...data: any[]) => void
 
+interface PresentationDiagnosticLogger {
+  info(event: string, payload?: unknown): void;
+  warn(event: string, payload?: unknown): void;
+  error(event: string, error: unknown, payload?: unknown): void;
+  debouncedInfo(event: string, payload?: unknown): void;
+  flush(): void;
+}
+
+type MoveCameraRequest = { centerX: number, centerY: number, scale: number }
+
 const emptySceneName = '$$empty$$'
 
 interface Viewport {
@@ -104,6 +114,56 @@ const createLogger = (room: Room | undefined): Logger => {
     return (...args) => console.log(...args)
   }
 }
+
+const createDiagnosticLogger = (context: AppContext): PresentationDiagnosticLogger => {
+  const createAppLogger = (context as any).createLogger
+  if (typeof createAppLogger === 'function') {
+    return createAppLogger.call(context, 'camera', { debounceTime: 300, maxWaitTime: 2000 })
+  }
+
+  // Compatibility fallback for WindowManager versions without AppContext.createLogger().
+  const roomLogger = (context.getRoom() as any)?.logger
+  const prefix = `[Presentation][${context.appId}][camera]`
+  const emit = (level: 'info' | 'warn' | 'error', event: string, ...data: unknown[]) => {
+    try {
+      const printer = roomLogger?.[level]
+      if (typeof printer === 'function') printer.call(roomLogger, `${prefix}[${event}]`, ...data)
+    } catch {
+      // Diagnostics must never change the App API result or replace its original error.
+    }
+  }
+  const debouncedByEvent = new Map<string, ReturnType<typeof debounce>>()
+  const debouncedInfo = (event: string, payload?: unknown) => {
+    let emitDebounced = debouncedByEvent.get(event)
+    if (!emitDebounced) {
+      emitDebounced = debounce(
+        (nextPayload?: unknown) => emit('info', event, nextPayload),
+        300,
+        { maxWait: 2000 }
+      )
+      debouncedByEvent.set(event, emitDebounced)
+    }
+    emitDebounced(payload)
+  }
+  return {
+    info: (event, payload) => emit('info', event, payload),
+    warn: (event, payload) => emit('warn', event, payload),
+    error: (event, error, payload) => emit('error', event, error, payload),
+    debouncedInfo,
+    flush: () => debouncedByEvent.forEach(logger => logger.flush()),
+  }
+}
+
+const safeResourceLocation = (value: string): string => {
+  if (value.startsWith('data:')) return 'data:[omitted]'
+  if (value.startsWith('blob:')) return 'blob:[omitted]'
+  try {
+    const url = new URL(value)
+    return `${url.origin}${url.pathname}`
+  } catch {
+    return value.split('?')[0]
+  }
+}
 const scenesEqual = (scenes1?: SceneDefinition[], scenes2?: SceneDefinition[]): boolean => {
   if (!scenes1 || !scenes2) {return false}
   if (scenes1.length !== scenes2.length) return false;
@@ -119,6 +179,7 @@ const scenesEqual = (scenes1?: SceneDefinition[], scenes2?: SceneDefinition[]): 
 export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, PresentationController> = {
   kind: "Presentation",
   setup(context) {
+    const diagnosticLogger = createDiagnosticLogger(context)
     const view = context.getView()
     if (!view)
       throw new Error("[Presentation]: no whiteboard view, make sure you have added options.scenePath in addApp()")
@@ -148,6 +209,7 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
 
     const dispose = disposableStore()
     dispose.add(() => log(`[Presentation] dispose ${context.appId}`))
+    dispose.add(() => diagnosticLogger.flush())
 
     const view$$ = context.createStorage('view', { uid: "", originX: 0, originY: 0, width: 0, height: 0 })
 
@@ -190,50 +252,6 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
       pageIndex$.dispose();
     })
 
-    // Prepare scenes.
-    // Caution: some user may insert a 500-page PDF.
-    if (context.isAddApp) {
-      if (pages.length > 100)
-        warn(`[Presentation]: too many pages (${pages.length}), may cause performance issues`)
-
-      let redirectResolve: ((bol:boolean) => void) | undefined = undefined;
-      if (room && room.isWritable) {
-        const scenes = room.entireScenes()[scenePath];
-        if (pageIndex$.value < 0 || pageIndex$.value >= pages.length) {
-          throw new Error(`[Presentation] Invalid page index: ${pageIndex$.value}, scenes length: ${pages.length}`);
-        }
-        new Promise((resolve) => {
-          const {name, ppt} = scenes[pageIndex$.value];
-          redirectResolve = resolve;
-          const _scenes = pages.map((p, index) => ({
-            name: p.name ?? String(index + 1),
-            ppt: { width: p.width, height: p.height, src: p.src }
-          }))
-          
-          if (!scenesEqual(scenes, _scenes)) {
-            room.removeScenes(scenePath)
-            room.putScenes(scenePath, _scenes)
-          }
-          if(name === _scenes[pageIndex$.value].name && !ppt){
-            context.addPage({ scene: { name: emptySceneName } }).then(() => {
-              log(`[Presentation] setup setScenePath ${scenePath}/${emptySceneName}`);
-              context.setScenePath(`${scenePath}/${emptySceneName}`).then(()=>{
-                redirectResolve && redirectResolve(true);
-              })
-            });
-          } else {
-            redirectResolve && redirectResolve(false)
-          }
-        }).then(async(bol)=>{
-          await syncPage(pageIndex$.value, (room as any).logger);
-          if (bol) {
-            log(`[Presentation] setup removeScenes ${scenePath}/${emptySceneName}`);
-            room.removeScenes(`${scenePath}/${emptySceneName}`);
-          }
-        });
-      }
-    }
-
     // let lastIndex = -1
 
     const me = context.getRoom()?.uid || context.getDisplayer().observerId + ''
@@ -265,6 +283,47 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
       return true
     }
 
+    const prepareScenes = async (): Promise<void> => {
+      if (!context.isAddApp) return
+      // Caution: some user may insert a 500-page PDF.
+      if (pages.length > 100)
+        warn(`[Presentation]: too many pages (${pages.length}), may cause performance issues`)
+      if (!room || !room.isWritable) return
+      if (pageIndex$.value < 0 || pageIndex$.value >= pages.length) {
+        throw new Error(`[Presentation] Invalid page index: ${pageIndex$.value}, scenes length: ${pages.length}`)
+      }
+
+      const scenes = room.entireScenes()[scenePath]
+      if (!scenes || !scenes[pageIndex$.value]) {
+        throw new Error(`[Presentation]: no initial scene found at ${scenePath}, page index: ${pageIndex$.value}`)
+      }
+      const { name, ppt } = scenes[pageIndex$.value]
+      const nextScenes = pages.map((page, index) => ({
+        name: page.name ?? String(index + 1),
+        ppt: { width: page.width, height: page.height, src: page.src }
+      }))
+
+      if (!scenesEqual(scenes, nextScenes)) {
+        room.removeScenes(scenePath)
+        room.putScenes(scenePath, nextScenes)
+      }
+
+      const shouldRedirect = name === nextScenes[pageIndex$.value].name && !ppt
+      if (shouldRedirect) {
+        await context.addPage({ scene: { name: emptySceneName } })
+        log(`[Presentation] setup setScenePath ${scenePath}/${emptySceneName}`)
+        await context.setScenePath(`${scenePath}/${emptySceneName}`)
+      }
+
+      await syncPage(pageIndex$.value, (room as any).logger)
+      if (shouldRedirect) {
+        log(`[Presentation] setup removeScenes ${scenePath}/${emptySceneName}`)
+        room.removeScenes(`${scenePath}/${emptySceneName}`)
+      }
+    }
+
+    const prepareScenesPromise = prepareScenes()
+
     const canJumpPage = (index: number): boolean => {
       if (!context.getIsWritable()) {
         warn('[Presentation]: no permission, make sure you have test room.isWritable')
@@ -290,6 +349,11 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
 
       void syncPage(index).catch(error => {
         warn('[Presentation]: failed to sync page', error)
+        diagnosticLogger.error('jumpPage.failed', error, {
+          index,
+          pageIndex: pageIndex$.value,
+          focusScenePath: view.focusScenePath,
+        })
       })
       return true
     }
@@ -298,7 +362,16 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
     const nextPage = () => jumpPage(pageIndex$.value + 1)
     const jumpPageAsync = async (index: number): Promise<boolean> => {
       if (!canJumpPage(index)) return false
-      return syncPage(index)
+      try {
+        return await syncPage(index)
+      } catch (error) {
+        diagnosticLogger.error('jumpPageAsync.failed', error, {
+          index,
+          pageIndex: pageIndex$.value,
+          focusScenePath: view.focusScenePath,
+        })
+        throw error
+      }
     }
     const prevPageAsync = () => jumpPageAsync(pageIndex$.value - 1)
     const nextPageAsync = () => jumpPageAsync(pageIndex$.value + 1)
@@ -325,6 +398,7 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
         syncViewFromRemote(true)
       }
     }
+    let pendingMoveCameraRequest: MoveCameraRequest | undefined
     const syncView = () => {
       if (context.getIsWritable()) {
         if (options.debounceSync) {
@@ -336,14 +410,30 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
         if(width && height){
           throttleSyncView = setTimeout(() => {
             throttleSyncView = 0
-            const { camera, size } = view;
-            const fixedW = Math.min(size.width, size.height * width / height)
-            const fixedH = Math.min(size.height, size.width * height / width)
-            const w = fixedW / camera.scale
-            const h = fixedH / camera.scale
-            const x = camera.centerX - w / 2
-            const y = camera.centerY - h / 2
-            view$$.setState({ uid: me, originX: x, originY: y, width: w, height: h })
+            try {
+              const { camera, size } = view;
+              const fixedW = Math.min(size.width, size.height * width / height)
+              const fixedH = Math.min(size.height, size.width * height / width)
+              const w = fixedW / camera.scale
+              const h = fixedH / camera.scale
+              const x = camera.centerX - w / 2
+              const y = camera.centerY - h / 2
+              view$$.setState({ uid: me, originX: x, originY: y, width: w, height: h })
+              if (pendingMoveCameraRequest) {
+                diagnosticLogger.debouncedInfo(
+                  'moveCamera',
+                  getCameraDiagnosticState('moveCamera', pendingMoveCameraRequest)
+                )
+                pendingMoveCameraRequest = undefined
+              }
+            } catch (error) {
+              diagnosticLogger.error(
+                'syncView.failed',
+                error,
+                getCameraDiagnosticState('moveCamera', pendingMoveCameraRequest)
+              )
+              pendingMoveCameraRequest = undefined
+            }
           }, 50)
         }
       }
@@ -352,6 +442,7 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
     dispose.add(() => {
       clearTimeout(throttleSyncView)
       throttleSyncView = 0
+      pendingMoveCameraRequest = undefined
     })
 
     const syncViewFromRemote = (force = false, animate = false) => {
@@ -378,6 +469,68 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
     app.log = log
     app.warn = warn
 
+    const getCameraDiagnosticState = (
+      reason: 'initialize' | 'moveCamera',
+      requestedCamera?: MoveCameraRequest
+    ) => {
+      const page = app.page()
+      const pageSize = page && page.width > 0 && page.height > 0
+        ? { width: page.width, height: page.height }
+        : undefined
+      const viewSize = { width: view.size.width, height: view.size.height }
+      const viewCamera = {
+        centerX: view.camera.centerX,
+        centerY: view.camera.centerY,
+        scale: view.camera.scale,
+      }
+      const sharedViewport = { ...view$$.state }
+      const originScale = pageSize
+        ? Math.min(viewSize.width / pageSize.width, viewSize.height / pageSize.height)
+        : undefined
+      const normalizedScale = originScale && originScale > 0
+        ? viewCamera.scale / originScale
+        : undefined
+      const sharedScaleX = pageSize && sharedViewport.width > 0
+        ? pageSize.width / sharedViewport.width
+        : undefined
+      const sharedScaleY = pageSize && sharedViewport.height > 0
+        ? pageSize.height / sharedViewport.height
+        : undefined
+
+      return {
+        reason,
+        requestedCamera,
+        storageOriginSize: (context.storage.state as any).originSize,
+        sharedViewport,
+        pageSize,
+        referenceSize: pageSize,
+        viewSize,
+        viewCamera,
+        originScale,
+        normalizedScale,
+        sharedScaleX,
+        sharedScaleY,
+        focusScenePath: view.focusScenePath,
+        isWritable: context.getIsWritable(),
+      }
+    }
+
+    let didReportInitializedCamera = false
+    const reportInitializedCamera = (source: 'setup' | 'onSizeUpdated') => {
+      const page = app.page()
+      if (
+        didReportInitializedCamera ||
+        !(view.size.width > 0 && view.size.height > 0) ||
+        !page ||
+        !(page.width > 0 && page.height > 0)
+      ) return
+      didReportInitializedCamera = true
+      diagnosticLogger.info('initialize', {
+        source,
+        ...getCameraDiagnosticState('initialize'),
+      })
+    }
+
     if (options.justDocsViewReadonly) {
       app.setDocsViewReadonly(true)
     }
@@ -402,8 +555,12 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
     }
     scaleDocsToFit()
     dispose.make(() => {
-      view.callbacks.on('onSizeUpdated', scaleDocsToFit)
-      return () => view.callbacks.off('onSizeUpdated', scaleDocsToFit)
+      const onSizeUpdated = () => {
+        scaleDocsToFit()
+        reportInitializedCamera('onSizeUpdated')
+      }
+      view.callbacks.on('onSizeUpdated', onSizeUpdated)
+      return () => view.callbacks.off('onSizeUpdated', onSizeUpdated)
     })
 
     // Init viewport if provided `viewport`.
@@ -426,6 +583,7 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
     })
 
     syncViewFromRemote(true)
+    reportInitializedCamera('setup')
 
     dispose.add(context.emitter.on("writableChange", (isWritable: boolean): void => {
       app.setReadonly(!isWritable)
@@ -441,9 +599,7 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
       return view.camera.scale
     }
 
-    const screenshotCurrentPageAsync = async (_context: CanvasRenderingContext2D, _width?: number, _height?: number) => {
-      const uuid = room?.calibrationTimestamp?.toString() ?? Date.now().toString();
-
+    const screenshotCurrentPage = async (_context: CanvasRenderingContext2D, _width?: number, _height?: number) => {
       const currentPage = pages[pageIndex$.value];
       if (!currentPage) {
         throw new Error('[Presentation]: current page not found')
@@ -454,7 +610,13 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
       img.width = width;
       img.height = height;
       img.crossOrigin = 'Anonymous';
-      await new Promise(resolve => { img.onload = resolve; img.src = src })
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve()
+        img.onerror = () => reject(new Error(
+          `[Presentation]: failed to load screenshot page image: ${safeResourceLocation(src)}`
+        ))
+        img.src = src
+      })
       _context.drawImage(img, 0, 0, width, height, 0, 0, _width || width, _height || height);
       const currentScenePath = view.focusScenePath;
       if (!currentScenePath) {
@@ -476,6 +638,23 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
       }
     }
 
+    const screenshotCurrentPageAsync = async (
+      _context: CanvasRenderingContext2D,
+      _width?: number,
+      _height?: number
+    ) => {
+      try {
+        await screenshotCurrentPage(_context, _width, _height)
+      } catch (error) {
+        diagnosticLogger.error('screenshotCurrentPage.failed', error, {
+          pageIndex: pageIndex$.value,
+          outputSize: { width: _width, height: _height },
+          camera: getCameraDiagnosticState('initialize'),
+        })
+        throw error
+      }
+    }
+
     let scrollbar:Scrollbar | undefined;
     if (options.useScrollbar) {
       dispose.make(() => {
@@ -492,14 +671,22 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
     }
 
     const moveCamera = (camera: { centerX: number, centerY: number, scale: number }) => {
-      if (context.getIsWritable() && scrollbar) {
-        if (!scrollbar) {
-          throw new Error('[Presentation]: moveCamera must be called when appOptions: useScrollbar is true')
+      try {
+        if (context.getIsWritable() && scrollbar) {
+          pendingMoveCameraRequest = { ...camera }
+          scrollbar.moveCamera(camera);
+          return;
         }
-        scrollbar.moveCamera(camera);
-        return;
+        throw new Error('[Presentation]: moveCamera must be called in writable room')
+      } catch (error) {
+        pendingMoveCameraRequest = undefined
+        diagnosticLogger.error(
+          'moveCamera.failed',
+          error,
+          getCameraDiagnosticState('moveCamera', camera)
+        )
+        throw error
       }
-      throw new Error('[Presentation]: moveCamera must be called in writable room')
     }
 
     context.emitter.on('destroy', () => dispose())
@@ -517,7 +704,11 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
       } catch {}
 
       const data = await fetch(url)
-      if (!data.ok) throw new Error(`[Presentation]: failed to fetch ${url} - ${await data.text()}`)
+      if (!data.ok) {
+        throw new Error(
+          `[Presentation]: failed to fetch ${safeResourceLocation(url)}, status: ${data.status} ${data.statusText}`
+        )
+      }
 
       const blob = await data.blob()
       const reader = new FileReader()
@@ -528,7 +719,7 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
       })
     }
 
-    const toPdf = async (): Promise<{ pdf: ArrayBuffer, title: string } | null> => {
+    const toPdfInternal = async (): Promise<{ pdf: ArrayBuffer, title: string } | null> => {
       const MAX = 1920
       const firstPage = pages[0]
       const { width, height } = firstPage
@@ -542,6 +733,9 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
         pdfWidth = Math.floor(width * pdfHeight / height)
       }
       const scenes = context.getDisplayer().entireScenes()[scenePath]
+      if (!scenes) {
+        throw new Error(`[Presentation]: no scenes found while exporting PDF: ${scenePath}`)
+      }
 
       const stage_canvas = document.createElement('canvas')
       stage_canvas.width = pdfWidth
@@ -567,7 +761,13 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
 
         const url = await base64url(src)
         const img = document.createElement('img')
-        await new Promise(resolve => { img.onload = resolve; img.src = url })
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => resolve()
+          img.onerror = () => reject(new Error(
+            `[Presentation]: failed to load PDF page image, page index: ${index}`
+          ))
+          img.src = url
+        })
         stage.drawImage(img, 0, 0)
 
         wb.clearRect(0, 0, pdfWidth, pdfHeight)
@@ -611,6 +811,19 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
       return reportProgress(100, { pdf: data, title })
     }
 
+    const toPdf = async (): Promise<{ pdf: ArrayBuffer, title: string } | null> => {
+      try {
+        return await toPdfInternal()
+      } catch (error) {
+        diagnosticLogger.error('toPdf.failed', error, {
+          pageIndex: pageIndex$.value,
+          pageCount: pages.length,
+          focusScenePath: view.focusScenePath,
+        })
+        throw error
+      }
+    }
+
     dispose.add(listen(window, 'message', (ev: MessageEvent<{ appId: string, type: "@netless/_request_save_pdf_" }>) => {
       if (ev.data && ev.data.type == '@netless/_request_save_pdf_' && ev.data.appId == context.appId) {
         toPdf().catch(err => { warn(err); reportProgress(100, null) })
@@ -644,7 +857,10 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
       }
     }))
 
-    return controller
+    // Older WindowManager declarations model setup as synchronous even though
+    // AppProxy awaits its result. Keep that source compatibility until the new
+    // `SetupResult | Promise<SetupResult>` declaration is the minimum version.
+    return prepareScenesPromise.then(() => controller) as unknown as PresentationController
   }
 }
 

@@ -1,14 +1,18 @@
 /// <reference types="vite/client" />
 import { register, createFastboard, createUI, dispatchDocsEvent } from '@netless/fastboard'
-import { install, type PresentationController } from '../src'
+import { install, type PresentationAttributes, type PresentationController } from '../src'
 import { data } from './example'
 import fullWorkerString from '@netless/appliance-plugin/dist/fullWorker.js?raw';
 import subWorkerString from '@netless/appliance-plugin/dist/subWorker.js?raw';
 
+const ORIGIN_SIZE = { width: 1920, height: 1080 } as const
+
 install(register, {
   as: 'DocsViewer',
   appOptions: {
+    // Disable wheel, touch and drag camera input while keeping controller.moveCamera() available.
     disableDeviceCameraTransform: true,
+    // Scrollbars are UI only and are not required by controller.moveCamera().
     useScrollbar: false,
     debounceSync: true,
     maxCameraScale: 4,
@@ -144,31 +148,36 @@ document.querySelector<HTMLButtonElement>('#btn-add')!.onclick = async () => {
 }
 
 document.querySelector<HTMLButtonElement>('#btn-add2')!.onclick = async () => {
-  const appId = await fastboard.insertDocs({
-    fileType: "pdf",
-    scenePath: `/pdf/camera-scale-validation-${Date.now()}`,
-    title: "a.pdf",
-    scenes: [
-      {
-        name: "a.pdf 第 1 页",
-        ppt: {
-          height: 1010,
-          src: "https://convertcdn.netless.link/staticConvert/18140800fe8a11eb8cb787b1c376634e/1.png",
-          width: 714,
+  const appId = await fastboard.manager.addApp<PresentationAttributes>({
+    kind: 'DocsViewer',
+    options: {
+      scenePath: `/pdf/camera-scale-validation-${Date.now()}`,
+      title: "originSize 1920x1080 / page 714x1010",
+      scenes: [
+        {
+          name: "a.pdf 第 1 页",
+          ppt: {
+            height: 1010,
+            src: "https://convertcdn.netless.link/staticConvert/18140800fe8a11eb8cb787b1c376634e/1.png",
+            width: 714,
+          },
         },
-      },
-      {
-        name: "a.pdf 第 2 页",
-        ppt: {
-          height: 1010,
-          src: "https://convertcdn.netless.link/staticConvert/18140800fe8a11eb8cb787b1c376634e/2.png",
-          width: 714,
+        {
+          name: "a.pdf 第 2 页",
+          ppt: {
+            height: 1010,
+            src: "https://convertcdn.netless.link/staticConvert/18140800fe8a11eb8cb787b1c376634e/2.png",
+            width: 714,
+          },
         },
-      },
-    ],
-  });
+      ],
+    },
+    attributes: {
+      originSize: ORIGIN_SIZE,
+    },
+  })
   lastPresentationAppId = appId
-  console.log('insertDocs() =>', appId)
+  console.log('manager.addApp({ attributes: { originSize } }) =>', appId, ORIGIN_SIZE)
   requestAnimationFrame(updateCameraStatus)
 }
 

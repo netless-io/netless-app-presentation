@@ -1,4 +1,4 @@
-import type { AnimationMode, AppContext, AppPayload, NetlessApp, PublicEvent, ReadonlyTeleBox, Room, SceneDefinition, View, WindowManager } from "@netless/window-manager"
+import type { AnimationMode, AppContext, AppPayload, NetlessApp, PublicEvent, ReadonlyTeleBox, Room, SceneDefinition, Size, View, WindowManager } from "@netless/window-manager"
 
 import { disposableStore } from '@wopjs/disposable'
 import { listen } from '@wopjs/dom'
@@ -8,6 +8,7 @@ import { Presentation, type PresentationConfig, type PresentationPage } from "./
 import { readable, type Readable } from "./store";
 import { Scrollbar, type ScrollbarEventCallback } from "./scrollbar";
 import { getCameraScaleRange, shouldDisableDeviceCameraTransform } from "./camera-options";
+import { cameraToSharedViewport, getCameraReferenceSize, getFitScale, isValidSize } from "./camera-reference";
 import debounce from "lodash/debounce";
 
 export type Logger = (...data: any[]) => void
@@ -23,6 +24,11 @@ interface PresentationDiagnosticLogger {
 type MoveCameraRequest = { centerX: number, centerY: number, scale: number }
 
 const emptySceneName = '$$empty$$'
+
+export interface PresentationAttributes {
+  /** Shared logical camera reference size. The page image keeps its original size. */
+  originSize?: Size | null;
+}
 
 interface Viewport {
   readonly x: number;
@@ -55,7 +61,7 @@ export interface PresentationAppOptions {
 
   /** justDocsViewReadonly is used to set the presentation readonly, it will be used in the presentation, and the presentation will be readonly when the app is initialized */
   justDocsViewReadonly?: true;
-  /** useScrollbar is used to set the presentation use scrollbar, it will be used in the presentation, and the presentation will be use scrollbar when the app is initialized */
+  /** Shows draggable scrollbars. This does not affect PresentationController.moveCamera(). */
   useScrollbar?: boolean;
   /** debounceSync is used to set the presentation debounce sync, it will be used in the presentation, and the presentation will be debounce sync when the app is initialized */
   debounceSync?: boolean;
@@ -92,7 +98,7 @@ export interface PresentationController {
   setDocsViewReadonly: (bol: boolean) => void;
   /** set the presentation readonly */
   setReadonly: (bol: boolean) => void;
-  /** move the camera */
+  /** Moves the camera through the API, regardless of whether scrollbars are shown. */
   moveCamera: (camera: { centerX: number, centerY: number, scale: number }) => void;
   /** get the origin scale */
   getOriginScale: () => number;
@@ -176,7 +182,7 @@ const scenesEqual = (scenes1?: SceneDefinition[], scenes2?: SceneDefinition[]): 
   });
 };
 
-export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, PresentationController> = {
+export const NetlessAppPresentation: NetlessApp<PresentationAttributes, {}, PresentationAppOptions, PresentationController> = {
   kind: "Presentation",
   setup(context) {
     const diagnosticLogger = createDiagnosticLogger(context)
@@ -199,6 +205,13 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
     const log = options.log || createLogger(room)
     const roomLogger = (room as any)?.logger
     const warn: Logger = (...data) => roomLogger?.warn ? roomLogger.warn(...data) : log(...data)
+    const configuredOriginSize = context.storage.state.originSize
+    const originSize = isValidSize(configuredOriginSize)
+      ? { width: configuredOriginSize.width, height: configuredOriginSize.height }
+      : undefined
+    if (configuredOriginSize != null && !originSize) {
+      warn(`[Presentation] originSize should contain finite positive width and height, got ${JSON.stringify(configuredOriginSize)}`)
+    }
     let maxCameraScale = options.maxCameraScale ?? 3
     if (!(Number.isFinite(maxCameraScale) && maxCameraScale! > 0)) {
       warn(`[Presentation] maxCameraScale should be a positive number, got ${options.maxCameraScale}`)
@@ -378,23 +391,44 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
     const pageState = () => ({ index: pageIndex$.value, length: pages.length })
 
     const scaleDocsToFit = () => {
-      const { width, height } = app.page() || {}
-      if (width && height) {
+      const page = app.page()
+      if (page && isValidSize(page)) {
+        const referenceSize = getCameraReferenceSize(originSize, page)
+        if (originSize) {
+          const fitScale = getFitScale(view.size, referenceSize)
+          if (!fitScale) return
+          const { minScale, maxScale } = getCameraScaleRange(
+            fitScale,
+            maxCameraScale,
+            options.disableCameraTransform
+          )
+          view.setCameraBound({
+            damping: 1,
+            maxContentMode: () => maxScale,
+            minContentMode: () => minScale,
+            centerX: 0, centerY: 0, width: page.width, height: page.height
+          })
+        }
         view.moveCameraToContain({
-          originX: -width / 2, originY: -height / 2, width, height,
+          originX: -referenceSize.width / 2,
+          originY: -referenceSize.height / 2,
+          width: referenceSize.width,
+          height: referenceSize.height,
           animationMode: 'immediately' as AnimationMode.Immediately
         })
-        const { minScale, maxScale } = getCameraScaleRange(
-          view.camera.scale,
-          maxCameraScale,
-          options.disableCameraTransform
-        )
-        view.setCameraBound({
-          damping: 1,
-          maxContentMode: () => maxScale,
-          minContentMode: () => minScale,
-          centerX: 0, centerY: 0, width, height
-        })
+        if (!originSize) {
+          const { minScale, maxScale } = getCameraScaleRange(
+            view.camera.scale,
+            maxCameraScale,
+            options.disableCameraTransform
+          )
+          view.setCameraBound({
+            damping: 1,
+            maxContentMode: () => maxScale,
+            minContentMode: () => minScale,
+            centerX: 0, centerY: 0, width: page.width, height: page.height
+          })
+        }
         syncViewFromRemote(true)
       }
     }
@@ -406,19 +440,15 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
           throttleSyncView = 0;
         }
         if (throttleSyncView > 0) return
-        const { width, height } = app.page() || {}
-        if(width && height){
+        const page = app.page()
+        if (page && isValidSize(page)) {
           throttleSyncView = setTimeout(() => {
             throttleSyncView = 0
             try {
               const { camera, size } = view;
-              const fixedW = Math.min(size.width, size.height * width / height)
-              const fixedH = Math.min(size.height, size.width * height / width)
-              const w = fixedW / camera.scale
-              const h = fixedH / camera.scale
-              const x = camera.centerX - w / 2
-              const y = camera.centerY - h / 2
-              view$$.setState({ uid: me, originX: x, originY: y, width: w, height: h })
+              const referenceSize = getCameraReferenceSize(originSize, page)
+              const viewport = cameraToSharedViewport(camera, size, referenceSize)
+              if (viewport) view$$.setState({ uid: me, ...viewport })
               if (pendingMoveCameraRequest) {
                 diagnosticLogger.debouncedInfo(
                   'moveCamera',
@@ -474,8 +504,11 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
       requestedCamera?: MoveCameraRequest
     ) => {
       const page = app.page()
-      const pageSize = page && page.width > 0 && page.height > 0
+      const pageSize = page && isValidSize(page)
         ? { width: page.width, height: page.height }
+        : undefined
+      const referenceSize = pageSize
+        ? getCameraReferenceSize(originSize, pageSize)
         : undefined
       const viewSize = { width: view.size.width, height: view.size.height }
       const viewCamera = {
@@ -484,26 +517,24 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
         scale: view.camera.scale,
       }
       const sharedViewport = { ...view$$.state }
-      const originScale = pageSize
-        ? Math.min(viewSize.width / pageSize.width, viewSize.height / pageSize.height)
-        : undefined
+      const originScale = referenceSize ? getFitScale(viewSize, referenceSize) : undefined
       const normalizedScale = originScale && originScale > 0
         ? viewCamera.scale / originScale
         : undefined
-      const sharedScaleX = pageSize && sharedViewport.width > 0
-        ? pageSize.width / sharedViewport.width
+      const sharedScaleX = referenceSize && sharedViewport.width > 0
+        ? referenceSize.width / sharedViewport.width
         : undefined
-      const sharedScaleY = pageSize && sharedViewport.height > 0
-        ? pageSize.height / sharedViewport.height
+      const sharedScaleY = referenceSize && sharedViewport.height > 0
+        ? referenceSize.height / sharedViewport.height
         : undefined
 
       return {
         reason,
         requestedCamera,
-        storageOriginSize: (context.storage.state as any).originSize,
+        storageOriginSize: context.storage.state.originSize,
         sharedViewport,
         pageSize,
-        referenceSize: pageSize,
+        referenceSize,
         viewSize,
         viewCamera,
         originScale,
@@ -517,18 +548,21 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
 
     let didReportInitializedCamera = false
     const reportInitializedCamera = (source: 'setup' | 'onSizeUpdated') => {
-      const page = app.page()
-      if (
-        didReportInitializedCamera ||
-        !(view.size.width > 0 && view.size.height > 0) ||
-        !page ||
-        !(page.width > 0 && page.height > 0)
-      ) return
+      if (didReportInitializedCamera || !isValidSize(view.size) || !isValidSize(app.page())) return
       didReportInitializedCamera = true
       diagnosticLogger.info('initialize', {
         source,
         ...getCameraDiagnosticState('initialize'),
       })
+    }
+
+    if (originSize) {
+      let previousPageIndex = pageIndex$.value
+      dispose.add(pageIndex$.subscribe(nextPageIndex => {
+        if (nextPageIndex === previousPageIndex) return
+        previousPageIndex = nextPageIndex
+        scaleDocsToFit()
+      }))
     }
 
     if (options.justDocsViewReadonly) {
@@ -590,9 +624,9 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
     }))
 
     const getOriginScale = () => {
-      const { size } = view;
-      const { width, height } = getPageSize();
-      return Math.min(size.height / height, size.width / width);
+      const page = app.page()
+      if (!page || !isValidSize(page)) return 0
+      return getFitScale(view.size, getCameraReferenceSize(originSize, page)) || 0
     }
 
     const getScale =() => {
@@ -672,12 +706,19 @@ export const NetlessAppPresentation: NetlessApp<{}, {}, PresentationAppOptions, 
 
     const moveCamera = (camera: { centerX: number, centerY: number, scale: number }) => {
       try {
-        if (context.getIsWritable() && scrollbar) {
-          pendingMoveCameraRequest = { ...camera }
+        if (!context.getIsWritable()) {
+          throw new Error('[Presentation]: moveCamera must be called in writable room')
+        }
+        pendingMoveCameraRequest = { ...camera }
+        if (scrollbar) {
           scrollbar.moveCamera(camera);
           return;
         }
-        throw new Error('[Presentation]: moveCamera must be called in writable room')
+        view.moveCamera({
+          ...camera,
+          animationMode: 'immediately' as AnimationMode.Immediately
+        })
+        syncView()
       } catch (error) {
         pendingMoveCameraRequest = undefined
         diagnosticLogger.error(

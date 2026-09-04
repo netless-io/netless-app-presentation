@@ -10,11 +10,38 @@ export function isValidSize(size: Size | null | undefined): size is Size {
   )
 }
 
+export function isValidSharedViewport(
+  viewport: Rectangle | null | undefined
+): viewport is Rectangle {
+  return Boolean(
+    viewport &&
+    Number.isFinite(viewport.originX) &&
+    Number.isFinite(viewport.originY) &&
+    isValidSize(viewport)
+  )
+}
+
 export function getCameraReferenceSize(
   originSize: Size | null | undefined,
   pageSize: Size
 ): Size {
   return isValidSize(originSize) ? originSize : pageSize
+}
+
+export function fitPageSizeToOrigin(
+  pageSize: Size,
+  originSize: Size | null | undefined
+): Size {
+  if (!isValidSize(pageSize) || !isValidSize(originSize)) return { ...pageSize }
+  const ratio = Math.min(
+    originSize.width / pageSize.width,
+    originSize.height / pageSize.height
+  )
+  if (!(Number.isFinite(ratio) && ratio > 0)) return { ...pageSize }
+  return {
+    width: pageSize.width * ratio,
+    height: pageSize.height * ratio,
+  }
 }
 
 export function getFitScale(viewSize: Size, referenceSize: Size): number | undefined {

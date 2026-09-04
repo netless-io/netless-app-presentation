@@ -67,9 +67,28 @@ fastboard.manager.addApp({
         previewURL: e.preview
       }
     }))
+  },
+  attributes: {
+    originSize: { width: 1280, height: 720 }
   }
 })
 ```
+
+When `originSize` is configured, it is the shared whiteboard reference size for `scale = 1`.
+Before writing each page into the whiteboard scene, Presentation contains its
+`ppt.width/ppt.height` proportionally within `originSize`:
+
+```text
+ratio = min(originSize.width / ppt.width, originSize.height / ppt.height)
+scenePpt.width  = ppt.width * ratio
+scenePpt.height = ppt.height * ratio
+```
+
+The image URL is unchanged. The normalized size is used consistently by the scene, CameraBound,
+scrollbars, and clipping, so relative scale `1` shows the largest complete page without scrollbars.
+When switching pages, an established shared viewport is restored directly so the current relative
+scale is preserved without first applying an intermediate fit camera.
+Without `originSize`, the input `ppt.width/ppt.height` remains unchanged.
 
 Note that if you do not replace the DocsViewer app with `{ as: 'DocsViewer' }`,
 the [`dispatchDocsEvent()`](https://github.com/netless-io/fastboard#control-the-pdfpptx-apps)
@@ -167,7 +186,8 @@ if (app && app.kind === 'DocsViewer') {
 ```
 
 #### `getPageSize()`
-Get the size (width and height) of the current page.
+Get the current page size in whiteboard scene coordinates. With `originSize`, this returns the
+proportionally normalized size.
 
 ```js
 const app = fastboard.manager.queryOne(appId)

@@ -8,7 +8,7 @@ import { Presentation, type PresentationConfig, type PresentationPage } from "./
 import { readable, type Readable } from "./store";
 import { Scrollbar, type ScrollbarEventCallback } from "./scrollbar";
 import { getCameraScaleRange, shouldDisableDeviceCameraTransform } from "./camera-options";
-import { cameraToSharedViewport, getCameraReferenceSize, getFitScale, isValidSize } from "./camera-reference";
+import { cameraToSharedViewport, fitPageSizeToOrigin, getCameraReferenceSize, getFitScale, isValidSharedViewport, isValidSize } from "./camera-reference";
 import debounce from "lodash/debounce";
 
 export type Logger = (...data: any[]) => void
@@ -24,10 +24,13 @@ interface PresentationDiagnosticLogger {
 type MoveCameraRequest = { centerX: number, centerY: number, scale: number }
 
 const emptySceneName = '$$empty$$'
+const ORIGIN_SIZE_COORDINATE_VERSION = 2
 
 export interface PresentationAttributes {
-  /** Shared logical camera reference size. The page image keeps its original size. */
+  /** Shared logical camera reference size. New pages are proportionally contained within it. */
   originSize?: Size | null;
+  /** Internal marker for scenes whose ppt size has been normalized to originSize. */
+  _originSizeCoordinateVersion?: typeof ORIGIN_SIZE_COORDINATE_VERSION;
 }
 
 interface Viewport {
@@ -110,8 +113,15 @@ export interface PresentationController {
   screenshotCurrentPageAsync: (context: CanvasRenderingContext2D, width?: number, height?: number) => Promise<void>;
 }
 
-const ppt2page = (ppt: SceneDefinition["ppt"], name?: string): PresentationPage | null =>
-  ppt ? { width: ppt.width, height: ppt.height, src: ppt.src, thumbnail: ppt.previewURL, name } : null
+const ppt2page = (
+  ppt: SceneDefinition["ppt"],
+  name?: string,
+  originSize?: Size
+): PresentationPage | null => {
+  if (!ppt) return null
+  const size = fitPageSizeToOrigin(ppt, originSize)
+  return { ...size, src: ppt.src, thumbnail: ppt.previewURL, name }
+}
 
 const createLogger = (room: Room | undefined): Logger => {
   if (room && (room as any).logger) {
@@ -190,16 +200,6 @@ export const NetlessAppPresentation: NetlessApp<PresentationAttributes, {}, Pres
     if (!view)
       throw new Error("[Presentation]: no whiteboard view, make sure you have added options.scenePath in addApp()")
 
-    const pages = context.getScenes()?.map(({ ppt, name }) => ppt2page(ppt, name)).filter(Boolean) as PresentationPage[]
-    if (!pages || pages.length === 0)
-      throw new Error("[Presentation]: empty scenes, make sure you have added options.scenes in addApp()")
-    if (pages[0].src.startsWith('ppt'))
-      throw new Error("[Presentation]: legacy dynamic PPT is unsupported, please use the projector converter and @netless/slide to render it")
-
-    // Now it must have a blank scene points to "{scenePath}/{scenes[0].name}", e.g. "/pdf/123456/1"
-    // https://github.com/netless-io/window-manager/blob/c87df17/src/index.ts#L465-L476
-    const scenePath = context.getInitScenePath()!
-
     const options = context.getAppOptions() || {}
     const room = context.getRoom()
     const log = options.log || createLogger(room)
@@ -212,6 +212,28 @@ export const NetlessAppPresentation: NetlessApp<PresentationAttributes, {}, Pres
     if (configuredOriginSize != null && !originSize) {
       warn(`[Presentation] originSize should contain finite positive width and height, got ${JSON.stringify(configuredOriginSize)}`)
     }
+    const useOriginSizeCoordinates = Boolean(
+      originSize && (
+        context.isAddApp ||
+        context.storage.state._originSizeCoordinateVersion === ORIGIN_SIZE_COORDINATE_VERSION
+      )
+    )
+    if (originSize && context.isAddApp && context.getIsWritable()) {
+      context.storage.setState({
+        _originSizeCoordinateVersion: ORIGIN_SIZE_COORDINATE_VERSION,
+      })
+    }
+    const pages = context.getScenes()
+      ?.map(({ ppt, name }) => ppt2page(ppt, name, useOriginSizeCoordinates ? originSize : undefined))
+      .filter(Boolean) as PresentationPage[]
+    if (!pages || pages.length === 0)
+      throw new Error("[Presentation]: empty scenes, make sure you have added options.scenes in addApp()")
+    if (pages[0].src.startsWith('ppt'))
+      throw new Error("[Presentation]: legacy dynamic PPT is unsupported, please use the projector converter and @netless/slide to render it")
+
+    // Now it must have a blank scene points to "{scenePath}/{scenes[0].name}", e.g. "/pdf/123456/1"
+    // https://github.com/netless-io/window-manager/blob/c87df17/src/index.ts#L465-L476
+    const scenePath = context.getInitScenePath()!
     let maxCameraScale = options.maxCameraScale ?? 3
     if (!(Number.isFinite(maxCameraScale) && maxCameraScale! > 0)) {
       warn(`[Presentation] maxCameraScale should be a positive number, got ${options.maxCameraScale}`)
@@ -408,6 +430,10 @@ export const NetlessAppPresentation: NetlessApp<PresentationAttributes, {}, Pres
             minContentMode: () => minScale,
             centerX: 0, centerY: 0, width: page.width, height: page.height
           })
+          if (isValidSharedViewport(view$$.state)) {
+            syncViewFromRemote(true)
+            return
+          }
         }
         view.moveCameraToContain({
           originX: -referenceSize.width / 2,
@@ -809,7 +835,7 @@ export const NetlessAppPresentation: NetlessApp<PresentationAttributes, {}, Pres
           ))
           img.src = url
         })
-        stage.drawImage(img, 0, 0)
+        stage.drawImage(img, 0, 0, width, height)
 
         wb.clearRect(0, 0, pdfWidth, pdfHeight)
         const name = p.name ?? String(index + 1)

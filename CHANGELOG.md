@@ -1,8 +1,9 @@
 # ChangeLog
 
-## Unreleased
+## 0.1.11 (2026-08-31)
 
 - Add `disableDeviceCameraTransform` to disable local device camera input without restricting programmatic scaling up to `maxCameraScale`.
+- Add completion-aware `jumpPageAsync`, `prevPageAsync`, and `nextPageAsync` controller methods so WindowManager can report asynchronous page command failures.
 
 ## 0.1.9
 - Fix: devDependencies `lodash`

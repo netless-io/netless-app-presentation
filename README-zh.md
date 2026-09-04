@@ -64,9 +64,26 @@ fastboard.manager.addApp({
         previewURL: e.preview
       }
     }))
+  },
+  attributes: {
+    originSize: { width: 1280, height: 720 }
   }
 })
 ```
+
+配置 `originSize` 后，它表示 `scale = 1` 时的共享白板原始尺寸。Presentation 在写入白板
+scene 前，将每页 `ppt.width/ppt.height` 按原始宽高比等比 contain 到 `originSize`：
+
+```text
+ratio = min(originSize.width / ppt.width, originSize.height / ppt.height)
+scenePpt.width  = ppt.width * ratio
+scenePpt.height = ppt.height * ratio
+```
+
+图片 URL 不变。归一化后的尺寸同时用于 scene、CameraBound、滚动条和裁剪范围，因此相对倍率为
+`1` 时页面以最大等比例完整显示，不出现滚动条。切页时如果 shared viewport 已建立，会直接恢复
+该 viewport 并保持当前相对 scale，不会先应用一次中间 fit camera。未配置 `originSize` 时继续
+直接使用输入的 `ppt.width/ppt.height`。
 
 请注意，如果你没有使用 `{ as: 'DocsViewer' }` 替换 DocsViewer 应用，
 [`dispatchDocsEvent()`](https://github.com/netless-io/fastboard#control-the-pdfpptx-apps)
@@ -165,7 +182,7 @@ if (app && app.kind === 'DocsViewer') {
 ```
 
 #### `getPageSize()`
-获取当前页面的尺寸（宽度和高度）。
+获取当前页面在白板 scene 中的尺寸（宽度和高度）。配置 `originSize` 时返回等比归一化后的尺寸。
 
 ```js
 const app = fastboard.manager.queryOne(appId)

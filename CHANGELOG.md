@@ -1,5 +1,10 @@
 # ChangeLog
 
+## 0.1.12 (2026-09-11)
+
+- Treat every valid `originSize` attribute as the Presentation coordinate reference without requiring an internal storage version marker.
+- Stop writing `_originSizeCoordinateVersion` to App storage.
+
 ## 0.1.11 (2026-08-31)
 
 - Add `disableDeviceCameraTransform` to disable local device camera input without restricting programmatic scaling up to `maxCameraScale`.

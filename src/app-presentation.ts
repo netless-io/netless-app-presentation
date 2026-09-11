@@ -24,13 +24,10 @@ interface PresentationDiagnosticLogger {
 type MoveCameraRequest = { centerX: number, centerY: number, scale: number }
 
 const emptySceneName = '$$empty$$'
-const ORIGIN_SIZE_COORDINATE_VERSION = 2
 
 export interface PresentationAttributes {
   /** Shared logical camera reference size. New pages are proportionally contained within it. */
   originSize?: Size | null;
-  /** Internal marker for scenes whose ppt size has been normalized to originSize. */
-  _originSizeCoordinateVersion?: typeof ORIGIN_SIZE_COORDINATE_VERSION;
 }
 
 interface Viewport {
@@ -212,19 +209,8 @@ export const NetlessAppPresentation: NetlessApp<PresentationAttributes, {}, Pres
     if (configuredOriginSize != null && !originSize) {
       warn(`[Presentation] originSize should contain finite positive width and height, got ${JSON.stringify(configuredOriginSize)}`)
     }
-    const useOriginSizeCoordinates = Boolean(
-      originSize && (
-        context.isAddApp ||
-        context.storage.state._originSizeCoordinateVersion === ORIGIN_SIZE_COORDINATE_VERSION
-      )
-    )
-    if (originSize && context.isAddApp && context.getIsWritable()) {
-      context.storage.setState({
-        _originSizeCoordinateVersion: ORIGIN_SIZE_COORDINATE_VERSION,
-      })
-    }
     const pages = context.getScenes()
-      ?.map(({ ppt, name }) => ppt2page(ppt, name, useOriginSizeCoordinates ? originSize : undefined))
+      ?.map(({ ppt, name }) => ppt2page(ppt, name, originSize))
       .filter(Boolean) as PresentationPage[]
     if (!pages || pages.length === 0)
       throw new Error("[Presentation]: empty scenes, make sure you have added options.scenes in addApp()")

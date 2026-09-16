@@ -1,5 +1,10 @@
 # ChangeLog
 
+## 0.1.13-beta.0 (2026-09-16)
+
+- Add static `NetlessAppPresentation.teardown(context)` so the host can manually dispose a Presentation app instance; teardown is idempotent and still runs automatically on the `destroy` event.
+- Reformat `app-presentation.ts` with Prettier without changing behavior.
+
 ## 0.1.12 (2026-09-11)
 
 - Treat every valid `originSize` attribute as the Presentation coordinate reference without requiring an internal storage version marker.

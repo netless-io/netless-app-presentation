@@ -304,11 +304,20 @@ const setupBlurThumbnailDegradation = (config: {
   };
 
   // Re-degrade any background img that finishes loading a full-size image
-  // while the app is blurred. Scoped to the view container so the app's own
-  // preview-panel thumbnails are untouched.
+  // while the app is blurred. Listeners sit at document level (capture
+  // phase - load/error do not bubble but capture descends from document)
+  // and resolve the view container lazily per event, so a rebinding of
+  // view.divElement (bindContainer etc.) is followed automatically. The
+  // contains() check keeps the app's own preview-panel thumbnails untouched.
+  const ownsTarget = (target: EventTarget | null): target is HTMLImageElement => {
+    if (!isBackgroundImg(target)) return false;
+    const el = (view as any).divElement as HTMLElement | undefined | null;
+    return !!(el && el.contains(target as Node));
+  };
+
   const onImgLoad = (ev: Event): void => {
     if (!blurEpisode || !reDegradeEnabled) return;
-    if (!isBackgroundImg(ev.target)) return;
+    if (!ownsTarget(ev.target)) return;
     degrade();
   };
 
@@ -317,7 +326,7 @@ const setupBlurThumbnailDegradation = (config: {
   // still force-restores afterwards.
   const onImgError = (ev: Event): void => {
     if (!blurEpisode || !reDegradeEnabled) return;
-    if (!isBackgroundImg(ev.target)) return;
+    if (!ownsTarget(ev.target)) return;
     reDegradeEnabled = false;
   };
 
@@ -339,29 +348,12 @@ const setupBlurThumbnailDegradation = (config: {
   });
   dispose.add(offFocus);
 
-  const viewEl = (view as any).divElement as HTMLElement | undefined | null;
-  if (viewEl && typeof viewEl.addEventListener === "function") {
-    viewEl.addEventListener("load", onImgLoad, true);
-    viewEl.addEventListener("error", onImgError, true);
-    dispose.add(() => {
-      viewEl.removeEventListener("load", onImgLoad, true);
-      viewEl.removeEventListener("error", onImgError, true);
-    });
-  } else {
-    // View not mounted yet (should not happen after context.mountView):
-    // keep the degradation on blur only, without re-degrade coverage.
-    warnOnceMissingViewContainer(view);
-  }
-};
-
-// One-shot diagnostic for an unexpected missing view container.
-const degradedWarnedViews = new WeakSet<object>();
-const warnOnceMissingViewContainer = (view: View): void => {
-  if (degradedWarnedViews.has(view)) return;
-  degradedWarnedViews.add(view);
-  console.warn(
-    "[Presentation]: blur thumbnail degradation runs without re-degrade coverage (view container unavailable)",
-  );
+  document.addEventListener("load", onImgLoad, true);
+  document.addEventListener("error", onImgError, true);
+  dispose.add(() => {
+    document.removeEventListener("load", onImgLoad, true);
+    document.removeEventListener("error", onImgError, true);
+  });
 };
 
 const createLogger = (room: Room | undefined): Logger => {

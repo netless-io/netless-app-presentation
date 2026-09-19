@@ -263,7 +263,7 @@ const resolveImageUrl = (url: string): string => {
  * SDK React re-renders and the SDK's own background-image onError retries —
  * any path that (re)renders the full-size image while the app stays blurred.
  */
-const setupBlurThumbnailDegradation = (config: {
+export const setupBlurThumbnailDegradation = (config: {
   context: AppContext;
   view: View;
   pages: PresentationPage[];

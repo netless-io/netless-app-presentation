@@ -35,6 +35,9 @@ export class Preload implements IDisposable {
   // 当前触摸的索引
   touchIndex: number = 0;
   preloadSize: number = 0;
+  // 暂停后不再创建预加载链接（app 失焦降级时调用）；已插入的 link 会被移除，
+  // 挂起的 idle 回调重新进入 touch() 时也会被跳过
+  paused: boolean = false;
   constructor(readonly pages: PresentationPage[]) {
     this.preloadMap = new Map(pages.map((e,index) => [index, {
       src: e.src,
@@ -43,7 +46,18 @@ export class Preload implements IDisposable {
     this.preloadSize = this.preloadMap.size;
     this.touch(0, true);
   }
+  pause() {
+    if (this.paused) return;
+    this.paused = true;
+    this.destroySomeLink();
+  }
+  resume(index?: number) {
+    if (!this.paused) return;
+    this.paused = false;
+    this.touch(index ?? this.touchIndex, true);
+  }
   touch(index: number, force: boolean = false) {
+    if (this.paused) return;
     if (index >= this.preloadSize) {
       this.touchIndex = 0;
     } else {

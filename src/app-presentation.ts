@@ -96,6 +96,17 @@ export interface PresentationAppOptions {
   goToPageByClick?: boolean;
   /** useClipView is used to set the presentation use clip view, it will be used in the presentation, and the presentation will be use clip view when the app is initialized */
   useClipView?: boolean;
+  /**
+   * Max time (ms) `setup()` waits for the first visible page image to load
+   * before resolving anyway. Default: 5_000.
+   */
+  setupReadyTimeout?: number;
+  /**
+   * Blur thumbnail degradation keeps cached (focused-lost) presentations on
+   * the low-res `previewURL` thumbnail to save memory. Enabled by default in
+   * maximized/minimized states; set `true` to disable it.
+   */
+  disableBlurThumbnailDegradation?: boolean;
 }
 
 export interface PresentationController {
@@ -152,6 +163,205 @@ const ppt2page = (
   if (!ppt) return null;
   const size = fitPageSizeToOrigin(ppt, originSize);
   return { ...size, src: ppt.src, thumbnail: ppt.previewURL, name };
+};
+
+/**
+ * The whiteboard SDK renders the scene ppt as a real `<img alt="background">`
+ * inside the background HTML engine layer of the view. All blur degradation
+ * below works directly on that DOM node; no scene API is ever called.
+ */
+const findBackgroundImage = (view: View): HTMLImageElement | null => {
+  const container = (view as any).divElement as HTMLElement | undefined | null;
+  if (!container || typeof container.querySelector !== "function") return null;
+  return container.querySelector('img[alt="background"]');
+};
+
+/**
+ * Degradation is a lazy-mode cache optimization only: inactive unless the
+ * WindowManager runs with lazySetupInMaximizedMode enabled (read dynamically
+ * — lazy can be disabled at runtime, e.g. when forceMaximized is cleared).
+ * It also only applies when the window cannot be visible: maximized
+ * (covered by the top app) or minimized. Normal mode may show several
+ * windows side by side, so a blurred app there must keep the full image.
+ */
+const isBlurDegradationAllowed = (context: AppContext): boolean => {
+  if ((context.getWindowManager() as any)?.lazySetupInMaximizedMode !== true) {
+    return false;
+  }
+  const boxStatus = context.getBoxStatus();
+  if (boxStatus) {
+    return boxStatus !== "normal";
+  }
+  const boxState = context.getWindowManager().boxState;
+  return boxState !== undefined && boxState !== "normal";
+};
+
+const DEFAULT_SETUP_READY_TIMEOUT = 5_000;
+
+/**
+ * Resolve once the current page background image has loaded (or after
+ * `timeoutMs`). `false` means timeout or the app was disposed mid-wait;
+ * callers must treat it as "continue loading in background", not an error.
+ */
+const waitForCurrentPageImage = (
+  view: View,
+  timeoutMs: number,
+  isDisposed: () => boolean,
+): Promise<boolean> => {
+  return new Promise<boolean>(resolve => {
+    let settled = false;
+    let pollTimer: number | undefined;
+    const settle = (loaded: boolean) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeoutTimer);
+      if (pollTimer !== undefined) window.clearInterval(pollTimer);
+      resolve(loaded);
+    };
+    const timeoutTimer = window.setTimeout(() => settle(false), timeoutMs);
+    const check = () => {
+      if (isDisposed()) {
+        settle(false);
+        return;
+      }
+      const img = findBackgroundImage(view);
+      if (img && img.complete && img.naturalWidth > 0) {
+        settle(true);
+      }
+    };
+    check();
+    if (!settled) {
+      pollTimer = window.setInterval(check, 100);
+    }
+  });
+};
+
+/**
+ * Compare image URLs by resolved absolute href so relative/absolute
+ * representations of the same URL do not look different (and to keep the
+ * load-capture re-degrade loop terminating).
+ */
+const resolveImageUrl = (url: string): string => {
+  try {
+    return new URL(url, window.location.href).href;
+  } catch {
+    return url;
+  }
+};
+
+/**
+ * Blur thumbnail degradation (see lazy-setup design doc §15): when the app
+ * loses focus but stays cached (multi-runtime cache mode), swap the scene
+ * background `<img>` src to the low-res `PptDescription.previewURL`
+ * (`page.thumbnail`) via a pure DOM change and pause full-image preloading;
+ * restore the full image when focus comes back. Skipped when the page has no
+ * thumbnail.
+ *
+ * While degraded, every load of a background `<img>` is re-degraded
+ * immediately via a capture-phase `load` listener on the view container
+ * (`load` does not bubble but capture works). This covers remote page turns,
+ * SDK React re-renders and the SDK's own background-image onError retries —
+ * any path that (re)renders the full-size image while the app stays blurred.
+ */
+const setupBlurThumbnailDegradation = (config: {
+  context: AppContext;
+  view: View;
+  pages: PresentationPage[];
+  pageIndex$: Readable<number>;
+  app: Presentation;
+  dispose: ReturnType<typeof disposableStore>;
+}): void => {
+  const { context, view, pages, pageIndex$, app, dispose } = config;
+  // Two separate flags: `blurEpisode` covers the whole blurred period (pages
+  // without a thumbnail don't end it, so a later page degrades again), while
+  // `reDegradeEnabled` only turns off when the degraded thumbnail itself
+  // fails, so we don't fight the SDK's background onError retry.
+  let blurEpisode = false;
+  let reDegradeEnabled = false;
+
+  const degrade = (): void => {
+    const page = pages[pageIndex$.value];
+    if (!page?.thumbnail) return; // keep the full image as-is
+    const img = findBackgroundImage(view);
+    if (img && resolveImageUrl(img.src) !== resolveImageUrl(page.thumbnail)) {
+      img.src = page.thumbnail;
+    }
+  };
+
+  const restore = (): void => {
+    const page = pages[pageIndex$.value];
+    const img = findBackgroundImage(view);
+    if (page && img && resolveImageUrl(img.src) !== resolveImageUrl(page.src)) {
+      img.src = page.src;
+    }
+  };
+
+  const isBackgroundImg = (target: EventTarget | null): boolean => {
+    const el = target as HTMLImageElement | null;
+    return Boolean(
+      el && el.tagName === "IMG" && el.matches?.('img[alt="background"]'),
+    );
+  };
+
+  // Re-degrade any background img that finishes loading a full-size image
+  // while the app is blurred. Scoped to the view container so the app's own
+  // preview-panel thumbnails are untouched.
+  const onImgLoad = (ev: Event): void => {
+    if (!blurEpisode || !reDegradeEnabled) return;
+    if (!isBackgroundImg(ev.target)) return;
+    degrade();
+  };
+
+  // The degraded thumbnail failed to load: stop re-degrading for this blur
+  // episode so the SDK's onError retry can settle on the full image. Focus
+  // still force-restores afterwards.
+  const onImgError = (ev: Event): void => {
+    if (!blurEpisode || !reDegradeEnabled) return;
+    if (!isBackgroundImg(ev.target)) return;
+    reDegradeEnabled = false;
+  };
+
+  const offFocus = context.emitter.on("focus", (isFocused: boolean) => {
+    if (isFocused) {
+      if (blurEpisode) {
+        blurEpisode = false;
+        reDegradeEnabled = false;
+        restore();
+        app.preload.resume(pageIndex$.value);
+      }
+    } else {
+      if (!isBlurDegradationAllowed(context)) return;
+      blurEpisode = true;
+      reDegradeEnabled = true;
+      degrade();
+      app.preload.pause();
+    }
+  });
+  dispose.add(offFocus);
+
+  const viewEl = (view as any).divElement as HTMLElement | undefined | null;
+  if (viewEl && typeof viewEl.addEventListener === "function") {
+    viewEl.addEventListener("load", onImgLoad, true);
+    viewEl.addEventListener("error", onImgError, true);
+    dispose.add(() => {
+      viewEl.removeEventListener("load", onImgLoad, true);
+      viewEl.removeEventListener("error", onImgError, true);
+    });
+  } else {
+    // View not mounted yet (should not happen after context.mountView):
+    // keep the degradation on blur only, without re-degrade coverage.
+    warnOnceMissingViewContainer(view);
+  }
+};
+
+// One-shot diagnostic for an unexpected missing view container.
+const degradedWarnedViews = new WeakSet<object>();
+const warnOnceMissingViewContainer = (view: View): void => {
+  if (degradedWarnedViews.has(view)) return;
+  degradedWarnedViews.add(view);
+  console.warn(
+    "[Presentation]: blur thumbnail degradation runs without re-degrade coverage (view container unavailable)",
+  );
 };
 
 const createLogger = (room: Room | undefined): Logger => {
@@ -641,6 +851,12 @@ export const NetlessAppPresentation: NetlessApp<
     app.log = log;
     app.warn = warn;
 
+    // Setup only touches the current page's full image; the rest of the deck
+    // keeps loading through idle callbacks after the setup queue moves on.
+    if (pageIndex$.value !== 0) {
+      app.preload.touch(pageIndex$.value, true);
+    }
+
     const getCameraDiagnosticState = (
       reason: "initialize" | "moveCamera",
       requestedCamera?: MoveCameraRequest,
@@ -784,6 +1000,10 @@ export const NetlessAppPresentation: NetlessApp<
         app.setReadonly(!isWritable);
       }),
     );
+
+    if (!options.disableBlurThumbnailDegradation) {
+      setupBlurThumbnailDegradation({ context, view, pages, pageIndex$, app, dispose });
+    }
 
     const getOriginScale = () => {
       const page = app.page();
@@ -1207,9 +1427,16 @@ export const NetlessAppPresentation: NetlessApp<
     // Older WindowManager declarations model setup as synchronous even though
     // AppProxy awaits its result. Keep that source compatibility until the new
     // `SetupResult | Promise<SetupResult>` declaration is the minimum version.
-    return prepareScenesPromise.then(
-      () => controller,
-    ) as unknown as PresentationController;
+    const setupReadyTimeout = options.setupReadyTimeout ?? DEFAULT_SETUP_READY_TIMEOUT;
+    return prepareScenesPromise.then(async () => {
+      // Keep the serial setup queue honest: resolve only once the current
+      // page image is actually visible (or the bounded wait gives up).
+      const loaded = await waitForCurrentPageImage(view, setupReadyTimeout, () => disposed);
+      if (!loaded && !disposed) {
+        warn(`[Presentation] setup ready wait timed out after ${setupReadyTimeout}ms`);
+      }
+      return controller;
+    }) as unknown as PresentationController;
   },
   teardown(context) {
     teardownByContext.get(context)?.();

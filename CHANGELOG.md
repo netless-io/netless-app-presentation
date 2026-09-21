@@ -1,5 +1,12 @@
 # ChangeLog
 
+## 0.1.13-beta.2 (2026-09-21)
+
+- Complete the Presentation runtime teardown contract by disposing the app and unmounting TeleBox content, footer, and styles idempotently.
+- Suspend cached, unfocused Presentation resources: keep usable thumbnails, and hide GIF or no-thumbnail backgrounds behind a static pixel while preserving the measurable view container.
+- Release loaded preview image resources while cached and restore the current page and preload behavior when focus returns.
+- Observe TeleBox focus classes so resource suspension also follows host updates that intentionally suppress focus and blur events.
+
 ## 0.1.13-beta.0 (2026-09-16)
 
 - Add static `NetlessAppPresentation.teardown(context)` so the host can manually dispose a Presentation app instance; teardown is idempotent and still runs automatically on the `destroy` event.

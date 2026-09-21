@@ -110,7 +110,7 @@ export class Presentation implements IDisposable<void> {
     if (this.initialized) return
     this.initialized = true
 
-    this.dispose.add(() => this.previewLazyload?.destroy())
+    this.dispose.add(() => this.destroyPreviewLazyload())
 
     this.contentDOM.classList.toggle(this.c('readonly'), this.readonly)
     this.dom.appendChild(this.contentDOM)
@@ -276,6 +276,18 @@ export class Presentation implements IDisposable<void> {
     }
   }
 
+  /** Release preview images while this presentation stays in the runtime cache. */
+  suspendPreviewResources() {
+    this.togglePreview(false)
+    this.destroyPreviewLazyload()
+    this.previewDOM.querySelectorAll<HTMLImageElement>('img').forEach(img => {
+      img.removeAttribute('src')
+      img.removeAttribute('srcset')
+      img.removeAttribute('sizes')
+      LazyLoad.resetStatus(img)
+    })
+  }
+
   // [origin] means the cause:
   // - navigation: user clicked on the left / right button on footer
   // - input: user filled the bottom-right page number input box
@@ -320,6 +332,11 @@ export class Presentation implements IDisposable<void> {
       console.error(err)
       return src
     }
+  }
+
+  private destroyPreviewLazyload() {
+    this.previewLazyload?.destroy()
+    this.previewLazyload = null
   }
 
   private c(className: string): string {

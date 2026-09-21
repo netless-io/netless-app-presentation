@@ -35,6 +35,7 @@ import {
   isValidSharedViewport,
   isValidSize,
 } from "./camera-reference";
+import { createPresentationRuntimeTeardown } from "./runtime-lifecycle";
 import debounce from "lodash/debounce";
 
 export type Logger = (...data: any[]) => void;
@@ -249,13 +250,37 @@ const resolveImageUrl = (url: string): string => {
   }
 };
 
+const TRANSPARENT_BACKGROUND =
+  "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
+const BACKGROUND_SUSPENDED_CLASS =
+  "netless-app-presentation-background-suspended";
+
+const hasUsableThumbnail = (page: PresentationPage): boolean => {
+  const thumbnailURL = page.thumbnail;
+  if (!thumbnailURL) return false;
+  try {
+    const source = new URL(page.src, window.location.href);
+    const thumbnail = new URL(thumbnailURL, window.location.href);
+    const sameResourcePath =
+      source.origin === thumbnail.origin &&
+      source.pathname === thumbnail.pathname;
+    // OSS image resize URLs can return the complete animated GIF unchanged.
+    // Treat query-only GIF variants as the original resource, not a thumbnail.
+    if (/\.gif$/i.test(source.pathname) && sameResourcePath) return false;
+  } catch {
+    if (/\.gif(?:$|[?#])/i.test(page.src)) return false;
+  }
+  return resolveImageUrl(thumbnailURL) !== resolveImageUrl(page.src);
+};
+
 /**
  * Blur thumbnail degradation (see lazy-setup design doc §15): when the app
  * loses focus but stays cached (multi-runtime cache mode), swap the scene
  * background `<img>` src to the low-res `PptDescription.previewURL`
  * (`page.thumbnail`) via a pure DOM change and pause full-image preloading;
- * restore the full image when focus comes back. Skipped when the page has no
- * thumbnail.
+ * restore the full image when focus comes back. A page without a real
+ * thumbnail keeps its measurable view container, but its background layer is
+ * hidden and replaced with a static pixel after TeleBox commits the blur.
  *
  * While degraded, every load of a background `<img>` is re-degraded
  * immediately via a capture-phase `load` listener on the view container
@@ -272,19 +297,43 @@ export const setupBlurThumbnailDegradation = (config: {
   dispose: ReturnType<typeof disposableStore>;
 }): void => {
   const { context, view, pages, pageIndex$, app, dispose } = config;
+  const box = context.getBox();
+  const boxBlurClass = box.wrapClassName("blur");
   // Two separate flags: `blurEpisode` covers the whole blurred period (pages
   // without a thumbnail don't end it, so a later page degrades again), while
   // `reDegradeEnabled` only turns off when the degraded thumbnail itself
   // fails, so we don't fight the SDK's background onError retry.
   let blurEpisode = false;
   let reDegradeEnabled = false;
+  let boxBlurred = box.$box.classList.contains(boxBlurClass);
+
+  const setBackgroundSuspended = (suspended: boolean): void => {
+    app.whiteboardDOM.classList.toggle(
+      BACKGROUND_SUSPENDED_CLASS,
+      suspended,
+    );
+  };
 
   const degrade = (): void => {
     const page = pages[pageIndex$.value];
-    if (!page?.thumbnail) return; // keep the full image as-is
+    if (!page) return;
+    const thumbnailURL = page.thumbnail;
     const img = findBackgroundImage(view);
-    if (img && resolveImageUrl(img.src) !== resolveImageUrl(page.thumbnail)) {
-      img.src = page.thumbnail;
+    if (!thumbnailURL || !hasUsableThumbnail(page)) {
+      if (boxBlurred) {
+        setBackgroundSuspended(true);
+        if (
+          img &&
+          resolveImageUrl(img.src) !== resolveImageUrl(TRANSPARENT_BACKGROUND)
+        ) {
+          img.src = TRANSPARENT_BACKGROUND;
+        }
+      }
+      return;
+    }
+    setBackgroundSuspended(false);
+    if (img && resolveImageUrl(img.src) !== resolveImageUrl(thumbnailURL)) {
+      img.src = thumbnailURL;
     }
   };
 
@@ -294,6 +343,24 @@ export const setupBlurThumbnailDegradation = (config: {
     if (page && img && resolveImageUrl(img.src) !== resolveImageUrl(page.src)) {
       img.src = page.src;
     }
+    setBackgroundSuspended(false);
+  };
+
+  const suspendCachedResources = (): void => {
+    if (!blurEpisode || !boxBlurred) return;
+    app.suspendPreviewResources();
+    const page = pages[pageIndex$.value];
+    if (!page || !hasUsableThumbnail(page) || reDegradeEnabled) {
+      degrade();
+    }
+  };
+
+  const restoreFocusedResources = (): void => {
+    if (!blurEpisode) return;
+    blurEpisode = false;
+    reDegradeEnabled = false;
+    restore();
+    app.preload.resume(pageIndex$.value);
   };
 
   const isBackgroundImg = (target: EventTarget | null): boolean => {
@@ -332,21 +399,43 @@ export const setupBlurThumbnailDegradation = (config: {
 
   const offFocus = context.emitter.on("focus", (isFocused: boolean) => {
     if (isFocused) {
-      if (blurEpisode) {
-        blurEpisode = false;
-        reDegradeEnabled = false;
-        restore();
-        app.preload.resume(pageIndex$.value);
-      }
+      restoreFocusedResources();
     } else {
       if (!isBlurDegradationAllowed(context)) return;
       blurEpisode = true;
       reDegradeEnabled = true;
       degrade();
       app.preload.pause();
+      suspendCachedResources();
     }
   });
   dispose.add(offFocus);
+
+  const updateBoxBlurred = (blurred: boolean): void => {
+    if (boxBlurred === blurred) return;
+    boxBlurred = blurred;
+    if (blurred) suspendCachedResources();
+    else restoreFocusedResources();
+  };
+  const onBoxBlur = (): void => updateBoxBlurred(true);
+  const onBoxFocus = (): void => updateBoxBlurred(false);
+  box.events.on("blur", onBoxBlur);
+  box.events.on("focus", onBoxFocus);
+  dispose.add(() => {
+    box.events.off("blur", onBoxBlur);
+    box.events.off("focus", onBoxFocus);
+  });
+
+  // WindowManager may update TeleBox focus with skipUpdate=true. In that
+  // path the visual class changes but TeleBox intentionally emits no event.
+  const boxClassObserver = new MutationObserver(() => {
+    updateBoxBlurred(box.$box.classList.contains(boxBlurClass));
+  });
+  boxClassObserver.observe(box.$box, {
+    attributes: true,
+    attributeFilter: ["class"],
+  });
+  dispose.add(() => boxClassObserver.disconnect());
 
   document.addEventListener("load", onImgLoad, true);
   document.addEventListener("error", onImgError, true);
@@ -1153,13 +1242,23 @@ export const NetlessAppPresentation: NetlessApp<
 
     let disposed = false;
     let offDestroy: (() => void) | undefined;
+    // The public readonly box type hides host lifecycle mutators, while the
+    // TeleBox runtime exposes them for app mount cleanup.
+    const teardownRuntime = createPresentationRuntimeTeardown(
+      box as ReadonlyTeleBox & {
+        unmountContent(): unknown;
+        unmountFooter(): unknown;
+        unmountStyles(): unknown;
+      },
+      dispose,
+    );
     const teardown = () => {
       if (disposed) return;
       disposed = true;
       const removeDestroy = offDestroy;
       offDestroy = undefined;
       removeDestroy?.();
-      dispose();
+      teardownRuntime();
     };
     offDestroy = context.emitter.on("destroy", teardown);
     teardownByContext.set(context, teardown);

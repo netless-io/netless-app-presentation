@@ -12,6 +12,12 @@ $namespace: 'netless-app-presentation';
   overflow: hidden;
 }
 
+// Keep the view container measurable while releasing an unfocused cached
+// page's background from painting and compositing.
+.#{$namespace}-background-suspended .background {
+  display: none !important;
+}
+
 .#{$namespace}-preview-mask {
   display: none;
   position: absolute;

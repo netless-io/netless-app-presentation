@@ -1,5 +1,12 @@
 # ChangeLog
 
+## 0.1.13-beta.3 (2026-09-24)
+
+- Fast-fail the setup ready wait when the current page background image request has failed; an image element without a source still waits for the SDK to assign one, and a failed load logs its own warning instead of consuming the whole timeout.
+- Make the runtime teardown fault-tolerant: missing host unmount APIs or one failing mount no longer skip the remaining cleanup, errors still propagate, and teardown stays idempotent.
+- Stop preload from re-assigning `href` in an error retry loop: a failed page is marked error and retried only on explicit revisit or focus restore; stale `onload`/`onerror` callbacks after pause/resume/dispose are ignored via link identity, and a disposed preload accepts no new work.
+- Add the runtime-resources test suite (30/30 total) and document the lazy lifecycle WindowManager floor (1.0.23-beta.1+), the background degradation scope, and the best-effort preload behavior in the READMEs.
+
 ## 0.1.13-beta.2 (2026-09-21)
 
 - Complete the Presentation runtime teardown contract by disposing the app and unmounting TeleBox content, footer, and styles idempotently.

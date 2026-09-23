@@ -38,6 +38,7 @@ export class Preload implements IDisposable {
   // 暂停后不再创建预加载链接（app 失焦降级时调用）；已插入的 link 会被移除，
   // 挂起的 idle 回调重新进入 touch() 时也会被跳过
   paused: boolean = false;
+  private disposed = false;
   constructor(readonly pages: PresentationPage[]) {
     this.preloadMap = new Map(pages.map((e,index) => [index, {
       src: e.src,
@@ -52,23 +53,23 @@ export class Preload implements IDisposable {
     this.destroySomeLink();
   }
   resume(index?: number) {
-    if (!this.paused) return;
+    if (!this.paused || this.disposed) return;
     this.paused = false;
     this.touch(index ?? this.touchIndex, true);
   }
   touch(index: number, force: boolean = false) {
-    if (this.paused) return;
+    if (this.paused || this.disposed) return;
     if (index >= this.preloadSize) {
       this.touchIndex = 0;
     } else {
       this.touchIndex = index;
     }
     const value = this.preloadMap.get(this.touchIndex);
-    if (value && value.state === ELoadState.unloaded) {
+    if (value && (value.state === ELoadState.unloaded || (force && value.state === ELoadState.error))) {
       this.createLink(this.touchIndex, force);
     }
     if (this.loadingLinks.size < Preload.maxLinks) {
-      const willLoad = [...this.preloadMap.entries()].find(([i, e]) => i > this.touchIndex && e.state !== ELoadState.loaded);
+      const willLoad = [...this.preloadMap.entries()].find(([i, e]) => i > this.touchIndex && e.state === ELoadState.unloaded);
       if (willLoad) {
         this.requestAsyncCallBack(()=>{this.touch(willLoad[0], false)}, 100);
       }
@@ -100,21 +101,25 @@ export class Preload implements IDisposable {
       linkDom.as = 'image';
       linkDom.href = value.src;
       linkDom.dataset.order = index + '';
-      document.head.appendChild(linkDom);
       linkDom.onload = () => {
+        if (this.loadingLinks.get(index)?.link !== linkDom) return;
         const value = this.preloadMap.get(index);
         if (value) {
           value.state = ELoadState.loaded;
           this.preloadMap.set(index, value);
-          document.head.contains(linkDom) && document.head.removeChild(linkDom);
-          this.loadingLinks.delete(index);
+          this.removeLink(index, linkDom);
           this.touch(this.touchIndex + 1, false);
         }
       }
       linkDom.onerror = () => {
+        if (this.loadingLinks.get(index)?.link !== linkDom) return;
         const value = this.preloadMap.get(index);
-        if (value?.src) {
-          linkDom.href = value.src;
+        if (value) {
+          // Preloading is best effort. Do not retry in an error loop;
+          // revisiting the page explicitly may retry after network recovery.
+          value.state = ELoadState.error;
+          this.removeLink(index, linkDom);
+          this.touch(this.touchIndex + 1, false);
         }
       }
       this.loadingLinks.set(index, {
@@ -123,18 +128,24 @@ export class Preload implements IDisposable {
       });
       value.state = ELoadState.unloaded;
       this.preloadMap.set(index, value);
+      document.head.appendChild(linkDom);
       return ELoadState.unloaded;
     }
     return ELoadState.error;
   }
 
+  private removeLink(index: number, link: HTMLLinkElement) {
+    link.onload = null;
+    link.onerror = null;
+    document.head.contains(link) && document.head.removeChild(link);
+    this.loadingLinks.delete(index);
+  }
   private destroySomeLink(excludeIndex?: number) {
     for (const [index, { link }] of this.loadingLinks) {
       if (excludeIndex !== undefined && index === excludeIndex) {
         continue;
       }
-      document.head.contains(link) && document.head.removeChild(link);
-      this.loadingLinks.delete(index);
+      this.removeLink(index, link);
     }
   }
   private async requestAsyncCallBack (callBack:()=>void, timeout:number):Promise<void> {
@@ -152,6 +163,7 @@ export class Preload implements IDisposable {
       callBack();
   }
   dispose() {
+    this.disposed = true;
     this.destroySomeLink();
     this.preloadMap.clear();
   }

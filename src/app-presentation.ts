@@ -36,6 +36,7 @@ import {
   isValidSize,
 } from "./camera-reference";
 import { createPresentationRuntimeTeardown } from "./runtime-lifecycle";
+import { waitForCurrentPageImage } from "./setup-ready";
 import debounce from "lodash/debounce";
 
 export type Logger = (...data: any[]) => void;
@@ -200,44 +201,6 @@ const isBlurDegradationAllowed = (context: AppContext): boolean => {
 const DEFAULT_SETUP_READY_TIMEOUT = 5_000;
 
 /**
- * Resolve once the current page background image has loaded (or after
- * `timeoutMs`). `false` means timeout or the app was disposed mid-wait;
- * callers must treat it as "continue loading in background", not an error.
- */
-const waitForCurrentPageImage = (
-  view: View,
-  timeoutMs: number,
-  isDisposed: () => boolean,
-): Promise<boolean> => {
-  return new Promise<boolean>(resolve => {
-    let settled = false;
-    let pollTimer: number | undefined;
-    const settle = (loaded: boolean) => {
-      if (settled) return;
-      settled = true;
-      window.clearTimeout(timeoutTimer);
-      if (pollTimer !== undefined) window.clearInterval(pollTimer);
-      resolve(loaded);
-    };
-    const timeoutTimer = window.setTimeout(() => settle(false), timeoutMs);
-    const check = () => {
-      if (isDisposed()) {
-        settle(false);
-        return;
-      }
-      const img = findBackgroundImage(view);
-      if (img && img.complete && img.naturalWidth > 0) {
-        settle(true);
-      }
-    };
-    check();
-    if (!settled) {
-      pollTimer = window.setInterval(check, 100);
-    }
-  });
-};
-
-/**
  * Compare image URLs by resolved absolute href so relative/absolute
  * representations of the same URL do not look different (and to keep the
  * load-capture re-degrade loop terminating).
@@ -283,7 +246,8 @@ const hasUsableThumbnail = (page: PresentationPage): boolean => {
  * hidden and replaced with a static pixel after TeleBox commits the blur.
  *
  * While degraded, every load of a background `<img>` is re-degraded
- * immediately via a capture-phase `load` listener on the view container
+ * immediately via a capture-phase `load` listener on the document, filtered
+ * to the current view container
  * (`load` does not bubble but capture works). This covers remote page turns,
  * SDK React re-renders and the SDK's own background-image onError retries —
  * any path that (re)renders the full-size image while the app stays blurred.
@@ -1522,9 +1486,13 @@ export const NetlessAppPresentation: NetlessApp<
     return prepareScenesPromise.then(async () => {
       // Keep the serial setup queue honest: resolve only once the current
       // page image is actually visible (or the bounded wait gives up).
-      const loaded = await waitForCurrentPageImage(view, setupReadyTimeout, () => disposed);
-      if (!loaded && !disposed) {
+      const result = await waitForCurrentPageImage(
+        () => findBackgroundImage(view), setupReadyTimeout, () => disposed,
+      );
+      if (result === "timeout" && !disposed) {
         warn(`[Presentation] setup ready wait timed out after ${setupReadyTimeout}ms`);
+      } else if (result === "error" && !disposed) {
+        warn("[Presentation] setup page image failed to load; continuing setup");
       }
       return controller;
     }) as unknown as PresentationController;

@@ -99,6 +99,28 @@ handles app whose kind is `DocsViewer` or `Slide`.
 
 ### App Options
 
+#### Lazy cache lifecycle and image readiness
+
+Lazy setup/cache requires WindowManager `1.0.23-beta.1` or later with the
+`teardown` and focus-event lifecycle; integration is currently verified with
+`1.0.23-beta.3`. Older hosts without lazy mode can still use the normal viewer.
+
+`setupReadyTimeout` bounds the current background-image wait (default 5000 ms).
+A loaded image or a failed image request releases the wait; an image element
+without a source still waits for the SDK to assign it. Failure/timeout logs a
+warning and lets setup finish; it does not cancel SDK image loading or retrying.
+
+In lazy maximized/minimized mode, blurred apps use `ppt.previewURL` when it is a
+usable thumbnail. Otherwise their background is hidden behind a static pixel;
+focus restores the original image. `thumbnail(src)` customizes sidebar previews,
+not this background policy. Set `disableBlurThumbnailDegradation: true` to opt out.
+This reduces retained image resources; it does not guarantee reduced downloads,
+since the host can synchronize focus only after the initial setup wait.
+
+Image preloading is best effort: failed preload links are removed without an
+automatic retry loop. Explicitly revisiting the failed page can retry preloading;
+the SDK's visible image loading remains independent.
+
 #### `disableDeviceCameraTransform`
 
 Disable camera transforms initiated by local device input, such as mouse-wheel and touch gestures,

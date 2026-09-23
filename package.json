@@ -20,7 +20,7 @@
   "scripts": {
     "dev": "vite",
     "build": "esbuild-dev build.ts",
-    "test": "esbuild test/camera-options.test.ts --bundle --platform=node --format=cjs --outfile=test/.cache/camera-options.test.cjs && node --test test/.cache/camera-options.test.cjs && esbuild test/blur-degradation.test.ts --bundle --platform=node --format=cjs --outfile=test/.cache/blur-degradation.test.cjs --loader:.scss=text --external:@netless/window-manager && node --test test/.cache/blur-degradation.test.cjs"
+    "test": "esbuild test/camera-options.test.ts --bundle --platform=node --format=cjs --outfile=test/.cache/camera-options.test.cjs && node --test test/.cache/camera-options.test.cjs && esbuild test/blur-degradation.test.ts --bundle --platform=node --format=cjs --outfile=test/.cache/blur-degradation.test.cjs --loader:.scss=text --external:@netless/window-manager && node --test test/.cache/blur-degradation.test.cjs && esbuild test/runtime-resources.test.ts --bundle --platform=node --format=cjs --outfile=test/.cache/runtime-resources.test.cjs && node --test test/.cache/runtime-resources.test.cjs"
   },
   "peerDependencies": {
     "jspdf": "^2.5.1"

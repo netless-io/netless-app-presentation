@@ -93,6 +93,24 @@ scenePpt.height = ppt.height * ratio
 
 ### 应用选项
 
+#### Lazy 缓存生命周期与图片就绪
+
+Lazy setup/cache 需要带有 `teardown` 和 focus 事件生命周期的 WindowManager
+`1.0.23-beta.1` 或更高版本；当前集成验证版本为 `1.0.23-beta.3`。
+未启用 lazy 的旧宿主仍可使用普通查看功能。
+
+`setupReadyTimeout` 限制当前背景图的等待时间，默认 5000ms。图片加载成功或请求失败
+均结束等待；尚未设置图片地址的元素仍等待 SDK 赋值。失败/超时会记录警告并允许 setup
+完成，不会取消 SDK 自己的图片加载或重试。
+
+在 lazy 最大化/最小化模式下，失焦 App 优先使用可用的 `ppt.previewURL` 缩略图；
+没有可用缩略图时隐藏背景并替换为静态像素，重新聚焦恢复原图。`thumbnail(src)` 自定义
+侧边预览图，不参与此背景降级策略。设置 `disableBlurThumbnailDegradation: true` 可关闭降级。
+该优化减少常驻图片资源，不保证节省下载流量：宿主可能在首次 setup 等待完成后才补发焦点状态。
+
+预加载为尽力而为：失败时移除对应 link，不自动循环重试；显式重新访问失败页时可再次尝试
+预加载。SDK 的可见图片加载不受此策略影响。
+
 #### `disableDeviceCameraTransform`
 
 禁止鼠标滚轮、触摸手势等本地设备输入改变相机，但不改变程序化相机操作使用的

@@ -1,7 +1,7 @@
 export interface PresentationRuntimeBox {
-  unmountContent(): unknown;
-  unmountFooter(): unknown;
-  unmountStyles(): unknown;
+  unmountContent?(): unknown;
+  unmountFooter?(): unknown;
+  unmountStyles?(): unknown;
 }
 
 /** Build an idempotent runtime teardown while preserving the TeleBox shell. */
@@ -16,9 +16,16 @@ export const createPresentationRuntimeTeardown = (
     try {
       dispose();
     } finally {
-      box.unmountContent();
-      box.unmountFooter();
-      box.unmountStyles();
+      // A partial host API or a failing mount must not skip other cleanup.
+      try {
+        box.unmountContent?.();
+      } finally {
+        try {
+          box.unmountFooter?.();
+        } finally {
+          box.unmountStyles?.();
+        }
+      }
     }
   };
 };

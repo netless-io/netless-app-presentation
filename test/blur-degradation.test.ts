@@ -74,6 +74,7 @@ class FakeClassList {
 
 function makeConfig(container: FakeContainer) {
     const focusHandlers: Array<(v: boolean) => void> = [];
+    const activityHandlers: Array<() => void> = [];
     const boxHandlers: Record<string, Array<() => void>> = {};
     const calls = { pause: 0, resume: 0, suspendPreview: 0 };
     const disposeFns: Array<() => void> = [];
@@ -81,6 +82,7 @@ function makeConfig(container: FakeContainer) {
     const backgroundClasses = new FakeClassList();
     const boxClasses = new FakeClassList();
     const boxElement = { classList: boxClasses };
+    let boxState = "maximized";
     const box = {
         focus: true,
         $box: boxElement,
@@ -99,14 +101,15 @@ function makeConfig(container: FakeContainer) {
     const config = {
         context: {
             emitter: {
-                on: (_: string, fn: (v: boolean) => void) => {
-                    focusHandlers.push(fn);
+                on: (event: string, fn: any) => {
+                    if (event === "focus") focusHandlers.push(fn);
+                    else if (event === "runtimeActivity") activityHandlers.push(fn);
                     return () => {};
                 },
             },
             getBox: () => box,
             getBoxStatus: () => undefined,
-            getWindowManager: () => ({ lazySetupInMaximizedMode: true, boxState: "maximized" }),
+            getWindowManager: () => ({ lazySetupInMaximizedMode: true, boxState }),
         },
         view: { divElement: container as unknown as HTMLElement } as any,
         pages: [{ src: FULL, thumbnail: THUMB, width: 100, height: 100 }],
@@ -125,6 +128,8 @@ function makeConfig(container: FakeContainer) {
         config,
         blur: () => focusHandlers.forEach((f) => f(false)),
         focus: () => focusHandlers.forEach((f) => f(true)),
+        activity: () => activityHandlers.forEach(f => f()),
+        setBoxState: (state: string) => (boxState = state),
         commitBlur: () => {
             box.focus = false;
             boxClasses.toggle("telebox-blur", true);
@@ -163,6 +168,54 @@ test("degrades on blur and restores on focus", () => {
     cfg.focus();
     assert.equal(container.img.src, FULL, "focus restores full image");
     assert.equal(cfg.calls.resume, 1, "preload resumed on focus");
+});
+
+test("duplicate focus events run suspend/restore DOM ops only once per episode", () => {
+    listeners["load"] = [];
+    listeners["error"] = [];
+    const container = new FakeContainer(FULL);
+    const cfg = makeConfig(container);
+    setupBlurThumbnailDegradation(cfg.config as any);
+
+    // 进入降级态后，重复的 focus(false) 不再重复清理预览资源
+    cfg.blur();
+    cfg.commitBlur();
+    cfg.blur();
+    cfg.blur();
+    assert.equal(cfg.calls.pause, 1, "preload paused once per episode");
+    assert.equal(cfg.calls.suspendPreview, 1, "preview cleared once per episode");
+
+    // 重复的 focus(true) 也只恢复一次
+    cfg.focus();
+    cfg.focus();
+    assert.equal(cfg.calls.resume, 1, "preload resumed once");
+
+    // 新 episode 重新允许挂起
+    cfg.blur();
+    cfg.commitBlur();
+    cfg.blur();
+    assert.equal(cfg.calls.pause, 2, "new episode pauses preload once");
+    assert.equal(cfg.calls.suspendPreview, 2, "new episode suspends again");
+
+    cfg.focus();
+    assert.equal(cfg.calls.suspendPreview, 2);
+    assert.equal(cfg.calls.resume, 2);
+});
+
+test("an ignored blur does not consume the focus-state transition", () => {
+    listeners["load"] = [];
+    listeners["error"] = [];
+    const container = new FakeContainer(FULL);
+    const cfg = makeConfig(container);
+    setupBlurThumbnailDegradation(cfg.config as any);
+
+    cfg.setBoxState("normal");
+    cfg.blur();
+    assert.equal(cfg.calls.pause, 0, "normal mode ignores blur degradation");
+
+    cfg.setBoxState("maximized");
+    cfg.blur();
+    assert.equal(cfg.calls.pause, 1, "same blur applies after degradation becomes allowed");
 });
 
 test("re-degrades after view rebind (document-level listener follows new container)", () => {
@@ -364,6 +417,26 @@ test("runtime teardown disposes and unmounts each Presentation mount once", () =
     assert.deepEqual(calls, ["dispose", "content", "footer", "styles"]);
 });
 
+test("focus, foreground and maximized are all required to restore resources", () => {
+    const container = new FakeContainer(FULL);
+    const cfg = makeConfig(container);
+    setupBlurThumbnailDegradation(cfg.config as any);
+    const before = cfg.calls.resume;
+    (document as any).visibilityState = "hidden";
+    cfg.activity(); cfg.focus(); cfg.activity();
+    assert.equal(cfg.calls.resume, before);
+    assert.equal(cfg.calls.pause, 1, "duplicate inactive activity is deduplicated");
+    cfg.setBoxState("minimized");
+    (document as any).visibilityState = "visible";
+    cfg.activity();
+    assert.equal(cfg.calls.resume, before);
+    cfg.setBoxState("maximized"); cfg.activity();
+    assert.equal(cfg.calls.resume, before + 1);
+    cfg.blur(); cfg.activity();
+    assert.equal(cfg.calls.resume, before + 1, "foreground activity cannot override logical blur");
+    cfg.disposeAll();
+});
+
 test("dispose removes document listeners", () => {
     listeners["load"] = [];
     listeners["error"] = [];
@@ -373,5 +446,30 @@ test("dispose removes document listeners", () => {
     const cfg = makeConfig(container);
     setupBlurThumbnailDegradation(cfg.config as any);
     cfg.disposeAll();
-    assert.equal(removed.length - before, 2, "load+error listeners removed");
+    assert.equal(removed.length - before, 3, "load+error+visibility listeners removed");
+});
+
+test("disabling lazy restores a previously degraded unfocused runtime", () => {
+    const cfg = makeConfig(new FakeContainer(FULL));
+    setupBlurThumbnailDegradation(cfg.config as any);
+    cfg.blur();
+    const before = cfg.calls.resume;
+    (cfg.config.context as any).getWindowManager = () => ({ lazySetupInMaximizedMode: false, boxState: "normal" });
+    cfg.activity();
+    assert.equal(cfg.calls.resume, before + 1);
+    cfg.disposeAll();
+});
+
+test("host activity snapshot controls restore even while UI boxState is stale", () => {
+    const cfg = makeConfig(new FakeContainer(FULL));
+    let active = false;
+    (cfg.config.context as any).getRuntimeActivity = () => ({ active, revision: 1 });
+    setupBlurThumbnailDegradation(cfg.config as any);
+    cfg.activity();
+    const before = cfg.calls.resume;
+    cfg.setBoxState("minimized"); active = true; cfg.activity();
+    assert.equal(cfg.calls.resume, before + 1);
+    cfg.setBoxState("maximized"); active = false; cfg.activity();
+    assert.equal(cfg.calls.pause, 2, "host inactive must still suspend a visible UI");
+    cfg.disposeAll();
 });

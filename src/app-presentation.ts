@@ -99,8 +99,8 @@ export interface PresentationAppOptions {
   /** useClipView is used to set the presentation use clip view, it will be used in the presentation, and the presentation will be use clip view when the app is initialized */
   useClipView?: boolean;
   /**
-   * Max time (ms) `setup()` waits for the first visible page image to load
-   * before resolving anyway. Default: 5_000.
+   * First-image warning threshold in ms. Default: 5_000. New lazy hosts
+   * await real readiness; legacy/eager hosts resolve on timeout.
    */
   setupReadyTimeout?: number;
   /**
@@ -269,6 +269,29 @@ export const setupBlurThumbnailDegradation = (config: {
   // fails, so we don't fight the SDK's background onError retry.
   let blurEpisode = false;
   let reDegradeEnabled = false;
+  // Duplicate focus(false) deliveries are unavoidable (multiple sources in
+  // the host). Preview-resource clearing is the only non-idempotent DOM op
+  // in the blur path, so gate it on this flag until focus restores it.
+  let previewSuspended = false;
+  // A freshly-created runtime has active resources even if setup completed
+  // after the box already lost focus. Track applied resource state instead of
+  // reading box.focus, and ignore repeated signals from the host.
+  let appliedFocusState = true;
+  let logicalFocused = true;
+  const activityBlocked = (): boolean => {
+    const wm = context.getWindowManager() as any;
+    if (wm?.lazySetupInMaximizedMode !== true) return false;
+    const host = (context as any).getRuntimeActivity?.();
+    // Use the host's complete activity snapshot when available, rather than
+    // combining it with a local boxState from a different restore revision.
+    if (host) return document.visibilityState === "hidden" || !host.active;
+    return (
+      document.visibilityState === "hidden" ||
+      wm.boxState === "minimized" ||
+      wm.attributes?.minimized === true ||
+      context.getBoxStatus() === "minimized"
+    );
+  };
   let boxBlurred = box.$box.classList.contains(boxBlurClass);
 
   const setBackgroundSuspended = (suspended: boolean): void => {
@@ -284,7 +307,7 @@ export const setupBlurThumbnailDegradation = (config: {
     const thumbnailURL = page.thumbnail;
     const img = findBackgroundImage(view);
     if (!thumbnailURL || !hasUsableThumbnail(page)) {
-      if (boxBlurred) {
+      if (boxBlurred || activityBlocked()) {
         setBackgroundSuspended(true);
         if (
           img &&
@@ -311,8 +334,11 @@ export const setupBlurThumbnailDegradation = (config: {
   };
 
   const suspendCachedResources = (): void => {
-    if (!blurEpisode || !boxBlurred) return;
-    app.suspendPreviewResources();
+    if (!blurEpisode || (!boxBlurred && !activityBlocked())) return;
+    if (!previewSuspended) {
+      previewSuspended = true;
+      app.suspendPreviewResources();
+    }
     const page = pages[pageIndex$.value];
     if (!page || !hasUsableThumbnail(page) || reDegradeEnabled) {
       degrade();
@@ -323,6 +349,7 @@ export const setupBlurThumbnailDegradation = (config: {
     if (!blurEpisode) return;
     blurEpisode = false;
     reDegradeEnabled = false;
+    previewSuspended = false;
     restore();
     app.preload.resume(pageIndex$.value);
   };
@@ -361,25 +388,36 @@ export const setupBlurThumbnailDegradation = (config: {
     reDegradeEnabled = false;
   };
 
-  const offFocus = context.emitter.on("focus", (isFocused: boolean) => {
+  const applyActivity = (): void => {
+    const lazy = (context.getWindowManager() as any)?.lazySetupInMaximizedMode === true;
+    const isFocused = (!lazy || logicalFocused) && !activityBlocked();
+    if (appliedFocusState === isFocused) return;
+    if (!isFocused && !isBlurDegradationAllowed(context) && !activityBlocked()) return;
     if (isFocused) {
       restoreFocusedResources();
     } else {
-      if (!isBlurDegradationAllowed(context)) return;
       blurEpisode = true;
       reDegradeEnabled = true;
       degrade();
       app.preload.pause();
       suspendCachedResources();
     }
+    appliedFocusState = isFocused;
+  };
+  const offFocus = context.emitter.on("focus", (isFocused: boolean) => {
+    logicalFocused = isFocused;
+    applyActivity();
   });
   dispose.add(offFocus);
+  dispose.add((context.emitter as any).on("runtimeActivity", applyActivity));
+  document.addEventListener("visibilitychange", applyActivity);
+  dispose.add(() => document.removeEventListener("visibilitychange", applyActivity));
 
   const updateBoxBlurred = (blurred: boolean): void => {
     if (boxBlurred === blurred) return;
     boxBlurred = blurred;
     if (blurred) suspendCachedResources();
-    else restoreFocusedResources();
+    else if (logicalFocused && !activityBlocked()) restoreFocusedResources();
   };
   const onBoxBlur = (): void => updateBoxBlurred(true);
   const onBoxFocus = (): void => updateBoxBlurred(false);
@@ -1488,10 +1526,16 @@ export const NetlessAppPresentation: NetlessApp<
       // page image is actually visible (or the bounded wait gives up).
       const result = await waitForCurrentPageImage(
         () => findBackgroundImage(view), setupReadyTimeout, () => disposed,
+        {
+          waitForReady: () => Boolean((context as any).waitForActualSetupReady),
+          onTimeout: () => warn(`[Presentation] setup page image still pending after ${setupReadyTimeout}ms`),
+        },
       );
-      if (result === "timeout" && !disposed) {
-        warn(`[Presentation] setup ready wait timed out after ${setupReadyTimeout}ms`);
-      } else if (result === "error" && !disposed) {
+      if (disposed) throw new Error("[Presentation] disposed before setup ready");
+      if (result === "error" && (context as any).waitForActualSetupReady) {
+        throw new Error("[Presentation] setup page image failed to load");
+      }
+      if (result === "error" && !disposed) {
         warn("[Presentation] setup page image failed to load; continuing setup");
       }
       return controller;

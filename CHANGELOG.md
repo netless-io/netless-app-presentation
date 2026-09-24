@@ -1,5 +1,11 @@
 # ChangeLog
 
+## 0.1.13-beta.4 (2026-09-24)
+
+- In lazy WindowManager hosts, wait for the current page image's actual ready state after the five-second warning threshold; preserve bounded setup for legacy and eager hosts.
+- Reconcile focus, host activity, and browser visibility before restoring or suspending cached resources; deduplicate repeated blur resource cleanup.
+- Cover the new readiness and runtime activity transitions in tests.
+
 ## 0.1.13-beta.3 (2026-09-24)
 
 - Fast-fail the setup ready wait when the current page background image request has failed; an image element without a source still waits for the SDK to assign one, and a failed load logs its own warning instead of consuming the whole timeout.

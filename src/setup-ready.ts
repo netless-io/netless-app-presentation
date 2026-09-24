@@ -1,13 +1,15 @@
 export type SetupImageResult = "loaded" | "error" | "timeout" | "disposed";
 
-/** Wait for a terminal image state without blocking setup indefinitely. */
+/** New lazy hosts await actual readiness; legacy hosts retain the bounded wait. */
 export const waitForCurrentPageImage = (
   getImage: () => HTMLImageElement | null,
   timeoutMs: number,
   isDisposed: () => boolean,
+  options?: { waitForReady: () => boolean; onTimeout: () => void },
 ): Promise<SetupImageResult> => {
   return new Promise(resolve => {
     let settled = false;
+    let timedOut = false;
     let pollTimer: number | undefined;
     const settle = (result: SetupImageResult) => {
       if (settled) return;
@@ -16,12 +18,17 @@ export const waitForCurrentPageImage = (
       if (pollTimer !== undefined) window.clearInterval(pollTimer);
       resolve(result);
     };
-    const timeoutTimer = window.setTimeout(() => settle("timeout"), timeoutMs);
+    const timeoutTimer = window.setTimeout(() => {
+      timedOut = true;
+      options?.onTimeout();
+      if (!options?.waitForReady()) settle("timeout");
+    }, timeoutMs);
     const check = () => {
       if (isDisposed()) {
         settle("disposed");
         return;
       }
+      if (timedOut && !options?.waitForReady()) { settle("timeout"); return; }
       const img = getImage();
       if (img?.complete) {
         if (img.naturalWidth > 0) {

@@ -83,6 +83,37 @@ test("missing image has bounded wait; disposed app stops without further DOM rea
   assert.equal(reads, 1);
 });
 
+test("strict lazy readiness warns once but never reports a timeout as ready", async t => {
+  timers(t);
+  let img = image("https://test/page.png", false);
+  let warnings = 0;
+  let settled = false;
+  const result = waitForCurrentPageImage(() => img, 5000, () => false, {
+    waitForReady: () => true, onTimeout: () => { warnings++; },
+  });
+  void result.then(() => { settled = true; });
+  t.mock.timers.tick(15000); await Promise.resolve();
+  assert.equal(settled, false);
+  assert.equal(warnings, 1);
+  img = image("https://test/page.png", true, 100);
+  t.mock.timers.tick(100);
+  assert.equal(await result, "loaded");
+});
+
+test("strict lazy setup exits on disposal or when the host returns to eager", async t => {
+  timers(t);
+  let disposed = false;
+  let strict = true;
+  const options = { waitForReady: () => strict, onTimeout() {} };
+  const first = waitForCurrentPageImage(() => null, 5000, () => disposed, options);
+  t.mock.timers.tick(5000); disposed = true; t.mock.timers.tick(100);
+  assert.equal(await first, "disposed");
+  disposed = false;
+  const second = waitForCurrentPageImage(() => null, 5000, () => disposed, options);
+  t.mock.timers.tick(5000); strict = false; t.mock.timers.tick(100);
+  assert.equal(await second, "timeout");
+});
+
 test("partial host cleanup API still disposes and unmounts supported mounts", () => {
   const calls: string[] = [];
   const teardown = createPresentationRuntimeTeardown(

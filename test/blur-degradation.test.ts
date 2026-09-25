@@ -31,7 +31,7 @@ const mutationObservers: Array<{
     }
 };
 
-import { setupBlurThumbnailDegradation } from "../src/app-presentation";
+import { createDiagnosticLogger, setupBlurThumbnailDegradation } from "../src/app-presentation";
 import { Presentation } from "../src/presentation";
 import { createPresentationRuntimeTeardown } from "../src/runtime-lifecycle";
 
@@ -154,6 +154,29 @@ function makeConfig(container: FakeContainer) {
 const fireLoad = (target: unknown) => listeners["load"].forEach((fn) => fn({ target }));
 const fireError = (target: unknown) => listeners["error"].forEach((fn) => fn({ target }));
 
+test("diagnostic logger uses the current WindowManager sink and falls back to Room", () => {
+    const managerCalls: string[] = [];
+    const roomCalls: string[] = [];
+    let managerLogger: { info: (message: string) => void } | undefined = {
+        info: message => managerCalls.push(message),
+    };
+    const context = {
+        appId: "presentation-1",
+        getWindowManager: () => ({ Logger: managerLogger }),
+        getRoom: () => ({ logger: { info: (message: string) => roomCalls.push(message) } }),
+    } as any;
+    const logger = createDiagnosticLogger(context);
+
+    logger.debouncedInfo("camera.updated", { scale: 2 });
+    logger.flush();
+    assert.deepEqual(managerCalls, ["[Presentation][presentation-1][camera][camera.updated]"]);
+    assert.deepEqual(roomCalls, []);
+
+    managerLogger = undefined;
+    logger.info("camera.restored");
+    assert.deepEqual(roomCalls, ["[Presentation][presentation-1][camera][camera.restored]"]);
+});
+
 test("degrades on blur and restores on focus", () => {
     listeners["load"] = [];
     listeners["error"] = [];
@@ -271,6 +294,46 @@ test("thumbnail load failure pins the episode: no retry storm, focus still resto
     // focus still restores (no-op) and resumes preload
     cfg.focus();
     assert.equal(cfg.calls.resume, 1);
+});
+
+test("full-image failure keeps thumbnail degradation enabled for the SDK retry", () => {
+    listeners["load"] = [];
+    listeners["error"] = [];
+    const container = new FakeContainer(FULL);
+    const cfg = makeConfig(container);
+    setupBlurThumbnailDegradation(cfg.config as any);
+
+    cfg.blur();
+    assert.equal(container.img.src, THUMB);
+    container.img.src = FULL;
+    fireError(container.img);
+    container.img.src = FULL;
+    fireLoad(container.img);
+    assert.equal(container.img.src, THUMB, "successful SDK retry is degraded again");
+});
+
+test("thumbnail failure on one page does not pin a later page while blurred", () => {
+    listeners["load"] = [];
+    listeners["error"] = [];
+    const container = new FakeContainer(FULL);
+    const cfg = makeConfig(container);
+    const nextFull = "https://img.test/next.png";
+    const nextThumb = "https://img.test/next-thumb.png";
+    (cfg.config.pages as any).push({
+        src: nextFull, thumbnail: nextThumb, width: 100, height: 100,
+    });
+    setupBlurThumbnailDegradation(cfg.config as any);
+
+    cfg.blur();
+    fireError(container.img);
+    container.img.src = FULL;
+    fireLoad(container.img);
+    assert.equal(container.img.src, FULL, "failed page remains pinned");
+
+    cfg.pageIndex.value = 1;
+    container.img.src = nextFull;
+    fireLoad(container.img);
+    assert.equal(container.img.src, nextThumb, "new page is degraded");
 });
 
 test("pages without a thumbnail suspend only after TeleBox commits blur", () => {

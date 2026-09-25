@@ -263,12 +263,11 @@ export const setupBlurThumbnailDegradation = (config: {
   const { context, view, pages, pageIndex$, app, dispose } = config;
   const box = context.getBox();
   const boxBlurClass = box.wrapClassName("blur");
-  // Two separate flags: `blurEpisode` covers the whole blurred period (pages
-  // without a thumbnail don't end it, so a later page degrades again), while
-  // `reDegradeEnabled` only turns off when the degraded thumbnail itself
-  // fails, so we don't fight the SDK's background onError retry.
+  // A failed thumbnail is pinned only for its page during this blur episode.
   let blurEpisode = false;
-  let reDegradeEnabled = false;
+  let failedThumbnailPageIndex: number | null = null;
+  const canReDegrade = (): boolean =>
+    blurEpisode && failedThumbnailPageIndex !== pageIndex$.value;
   // Duplicate focus(false) deliveries are unavoidable (multiple sources in
   // the host). Preview-resource clearing is the only non-idempotent DOM op
   // in the blur path, so gate it on this flag until focus restores it.
@@ -340,7 +339,7 @@ export const setupBlurThumbnailDegradation = (config: {
       app.suspendPreviewResources();
     }
     const page = pages[pageIndex$.value];
-    if (!page || !hasUsableThumbnail(page) || reDegradeEnabled) {
+    if (!page || !hasUsableThumbnail(page) || canReDegrade()) {
       degrade();
     }
   };
@@ -348,7 +347,7 @@ export const setupBlurThumbnailDegradation = (config: {
   const restoreFocusedResources = (): void => {
     if (!blurEpisode) return;
     blurEpisode = false;
-    reDegradeEnabled = false;
+    failedThumbnailPageIndex = null;
     previewSuspended = false;
     restore();
     app.preload.resume(pageIndex$.value);
@@ -374,18 +373,23 @@ export const setupBlurThumbnailDegradation = (config: {
   };
 
   const onImgLoad = (ev: Event): void => {
-    if (!blurEpisode || !reDegradeEnabled) return;
+    if (!canReDegrade()) return;
     if (!ownsTarget(ev.target)) return;
     degrade();
   };
 
-  // The degraded thumbnail failed to load: stop re-degrading for this blur
-  // episode so the SDK's onError retry can settle on the full image. Focus
-  // still force-restores afterwards.
+  // Stop re-degrading this page when its thumbnail fails, so the SDK's
+  // onError retry can settle on the full image. Other pages remain eligible.
   const onImgError = (ev: Event): void => {
-    if (!blurEpisode || !reDegradeEnabled) return;
+    if (!canReDegrade()) return;
     if (!ownsTarget(ev.target)) return;
-    reDegradeEnabled = false;
+    const thumbnailURL = pages[pageIndex$.value]?.thumbnail;
+    if (
+      thumbnailURL &&
+      resolveImageUrl(ev.target.src) === resolveImageUrl(thumbnailURL)
+    ) {
+      failedThumbnailPageIndex = pageIndex$.value;
+    }
   };
 
   const applyActivity = (): void => {
@@ -397,7 +401,7 @@ export const setupBlurThumbnailDegradation = (config: {
       restoreFocusedResources();
     } else {
       blurEpisode = true;
-      reDegradeEnabled = true;
+      failedThumbnailPageIndex = null;
       degrade();
       app.preload.pause();
       suspendCachedResources();
@@ -447,24 +451,16 @@ export const setupBlurThumbnailDegradation = (config: {
   });
 };
 
-const createLogger = (room: Room | undefined): Logger => {
-  const roomLogger = (room as any)?.logger;
-  return (...args) => roomLogger?.info?.(...args);
+const getLogger = (context: AppContext) =>
+  (context.getWindowManager() as any)?.Logger ?? (context.getRoom() as any)?.logger;
+
+const createLogger = (context: AppContext): Logger => {
+  return (...args) => getLogger(context)?.info?.(...args);
 };
 
-const createDiagnosticLogger = (
+export const createDiagnosticLogger = (
   context: AppContext,
 ): PresentationDiagnosticLogger => {
-  const createAppLogger = (context as any).createLogger;
-  if (typeof createAppLogger === "function") {
-    return createAppLogger.call(context, "camera", {
-      debounceTime: 300,
-      maxWaitTime: 2000,
-    });
-  }
-
-  // Compatibility fallback for WindowManager versions without AppContext.createLogger().
-  const roomLogger = (context.getRoom() as any)?.logger;
   const prefix = `[Presentation][${context.appId}][camera]`;
   const emit = (
     level: "info" | "warn" | "error",
@@ -472,6 +468,7 @@ const createDiagnosticLogger = (
     ...data: unknown[]
   ) => {
     try {
+      const roomLogger = getLogger(context);
       const printer = roomLogger?.[level];
       if (typeof printer === "function")
         printer.call(roomLogger, `${prefix}[${event}]`, ...data);
@@ -551,9 +548,8 @@ export const NetlessAppPresentation: NetlessApp<
 
     const options = context.getAppOptions() || {};
     const room = context.getRoom();
-    const log = options.log || createLogger(room);
-    const roomLogger = (room as any)?.logger;
-    const warn: Logger = (...data) => roomLogger?.warn?.(...data);
+    const log = options.log || createLogger(context);
+    const warn: Logger = (...data) => getLogger(context)?.warn?.(...data);
     const configuredOriginSize = context.storage.state.originSize;
     const originSize = isValidSize(configuredOriginSize)
       ? {
@@ -923,7 +919,7 @@ export const NetlessAppPresentation: NetlessApp<
         view,
         options.thumbnail,
         options.useClipView,
-        error => roomLogger?.error?.("[Presentation] thumbnail URL parsing failed", context.appId, error),
+        error => getLogger(context)?.error?.("[Presentation] thumbnail URL parsing failed", context.appId, error),
       ),
     );
     app.contentDOM.dataset.appPresentationVersion = __VERSION__;
@@ -1519,8 +1515,8 @@ export const NetlessAppPresentation: NetlessApp<
     // `SetupResult | Promise<SetupResult>` declaration is the minimum version.
     const setupReadyTimeout = options.setupReadyTimeout ?? DEFAULT_SETUP_READY_TIMEOUT;
     return prepareScenesPromise.then(async () => {
-      // Keep the serial setup queue honest: resolve only once the current
-      // page image is actually visible (or the bounded wait gives up).
+      // Wait for the current page image or its first failure. The SDK owns
+      // background-image retries, so a failed request must not fail setup.
       const result = await waitForCurrentPageImage(
         () => findBackgroundImage(view), setupReadyTimeout, () => disposed,
         {
@@ -1529,10 +1525,7 @@ export const NetlessAppPresentation: NetlessApp<
         },
       );
       if (disposed) throw new Error("[Presentation] disposed before setup ready");
-      if (result === "error" && (context as any).waitForActualSetupReady) {
-        throw new Error("[Presentation] setup page image failed to load");
-      }
-      if (result === "error" && !disposed) {
+      if (result === "error") {
         warn("[Presentation] setup page image failed to load; continuing setup");
       }
       return controller;

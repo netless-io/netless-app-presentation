@@ -18,6 +18,7 @@ export interface PresentationConfig {
   readonly pages: PresentationPage[]
   readonly readonly?: boolean
   readonly thumbnail?: (src: string) => string
+  readonly onThumbnailError?: (error: unknown) => void
 }
 
 /**
@@ -59,6 +60,7 @@ export class Presentation implements IDisposable<void> {
   readonly dispose = disposableStore()
   readonly pages: PresentationPage[]
   readonly preload: Preload
+  readonly onThumbnailError?: (error: unknown) => void
 
   dom: Element | DocumentFragment
   contentDOM: HTMLDivElement
@@ -81,6 +83,7 @@ export class Presentation implements IDisposable<void> {
   constructor(config: PresentationConfig) {
     this.pages = config.pages
     this.preload = new Preload(this.pages)
+    this.onThumbnailError = config.onThumbnailError
     if (config.thumbnail) this.thumbnail = config.thumbnail
     this.dispose.add(this.preload)
     this.readonly = config.readonly ?? false
@@ -329,7 +332,11 @@ export class Presentation implements IDisposable<void> {
       url.searchParams.set('x-oss-process', 'image/resize,l_50')
       return url.toString()
     } catch (err) {
-      console.error(err)
+      try {
+        this.onThumbnailError?.(err)
+      } catch {
+        // A diagnostic failure must not change the thumbnail fallback.
+      }
       return src
     }
   }

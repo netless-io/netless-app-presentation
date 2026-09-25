@@ -3,6 +3,18 @@ import { test, type TestContext } from "node:test";
 import { createPresentationRuntimeTeardown } from "../src/runtime-lifecycle";
 import { waitForCurrentPageImage } from "../src/setup-ready";
 import { Preload, ELoadState } from "../src/preload";
+import { Presentation } from "../src/presentation";
+
+test("invalid thumbnail URL reports its error and preserves the original URL", () => {
+  const errors: unknown[] = [];
+  const viewer = { onThumbnailError: (error: unknown) => errors.push(error) } as Presentation;
+  assert.equal(Presentation.prototype.thumbnail.call(viewer, "/relative.png"), "/relative.png");
+  assert.equal(errors.length, 1);
+  assert.ok(errors[0] instanceof Error);
+
+  const brokenLogger = { onThumbnailError: () => { throw new Error("logger failed"); } } as Presentation;
+  assert.equal(Presentation.prototype.thumbnail.call(brokenLogger, "/relative.png"), "/relative.png");
+});
 
 function timers(t: TestContext) {
   t.mock.timers.enable({ apis: ["setTimeout", "setInterval"] });

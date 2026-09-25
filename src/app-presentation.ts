@@ -448,11 +448,8 @@ export const setupBlurThumbnailDegradation = (config: {
 };
 
 const createLogger = (room: Room | undefined): Logger => {
-  if (room && (room as any).logger) {
-    return (...args) => (room as any).logger.info(...args);
-  } else {
-    return (...args) => console.log(...args);
-  }
+  const roomLogger = (room as any)?.logger;
+  return (...args) => roomLogger?.info?.(...args);
 };
 
 const createDiagnosticLogger = (
@@ -556,8 +553,7 @@ export const NetlessAppPresentation: NetlessApp<
     const room = context.getRoom();
     const log = options.log || createLogger(room);
     const roomLogger = (room as any)?.logger;
-    const warn: Logger = (...data) =>
-      roomLogger?.warn ? roomLogger.warn(...data) : log(...data);
+    const warn: Logger = (...data) => roomLogger?.warn?.(...data);
     const configuredOriginSize = context.storage.state.originSize;
     const originSize = isValidSize(configuredOriginSize)
       ? {
@@ -927,6 +923,7 @@ export const NetlessAppPresentation: NetlessApp<
         view,
         options.thumbnail,
         options.useClipView,
+        error => roomLogger?.error?.("[Presentation] thumbnail URL parsing failed", context.appId, error),
       ),
     );
     app.contentDOM.dataset.appPresentationVersion = __VERSION__;
@@ -1597,6 +1594,7 @@ function createPresentation(
   view: View,
   thumbnail?: (src: string) => string,
   useClipView?: boolean,
+  onThumbnailError?: (error: unknown) => void,
 ): AppPresentation {
   box.mountStyles(styles);
 
@@ -1605,6 +1603,7 @@ function createPresentation(
     readonly: box.readonly,
     jumpPage,
     thumbnail,
+    onThumbnailError,
   });
   app.box = box;
   box.mountContent(app.contentDOM);

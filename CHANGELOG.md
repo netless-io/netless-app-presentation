@@ -1,5 +1,12 @@
 # ChangeLog
 
+## 0.1.13 (2026-09-27)
+
+- Add idempotent runtime teardown and suspend image, GIF, preview, and preload resources while a lazy Presentation app is inactive.
+- Wait for the current page image to become ready in lazy WindowManager hosts, with a bounded wait for older hosts.
+- Preserve thumbnail fallback and setup recovery when image requests fail; prevent preload retry loops.
+- Route diagnostics through WindowManager or Room logging and cover lifecycle, readiness, and image failures with tests.
+
 ## 0.1.13-beta.4 (2026-09-24)
 
 - In lazy WindowManager hosts, wait for the current page image's actual ready state after the five-second warning threshold; preserve bounded setup for legacy and eager hosts.

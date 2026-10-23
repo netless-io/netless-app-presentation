@@ -1,4 +1,4 @@
-import type { Camera, Rectangle, Size } from "@netless/window-manager"
+import type { Camera, Rectangle, Size } from "white-web-sdk"
 
 export function isValidSize(size: Size | null | undefined): size is Size {
   return Boolean(

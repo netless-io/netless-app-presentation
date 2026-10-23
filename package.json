@@ -19,6 +19,7 @@
   ],
   "scripts": {
     "dev": "vite",
+    "dev:e2e": "pnpm --dir e2e dev",
     "build": "esbuild-dev build.ts",
     "test": "esbuild test/camera-options.test.ts --bundle --platform=node --format=cjs --outfile=test/.cache/camera-options.test.cjs && node --test test/.cache/camera-options.test.cjs && esbuild test/blur-degradation.test.ts --bundle --platform=node --format=cjs --outfile=test/.cache/blur-degradation.test.cjs --loader:.scss=text --external:@netless/window-manager && node --test test/.cache/blur-degradation.test.cjs && esbuild test/runtime-resources.test.ts --bundle --platform=node --format=cjs --outfile=test/.cache/runtime-resources.test.cjs && node --test test/.cache/runtime-resources.test.cjs"
   },
@@ -34,8 +35,7 @@
     "@hyrious/configs": "^0.1.1",
     "@hyrious/dts": "^0.2.1",
     "@hyrious/esbuild-dev": "^0.10.5",
-    "@netless/fastboard": "1.1.1-beta.0",
-    "@netless/window-manager": "^1.0.7-beta.9",
+    "@netless/window-manager": "^1.0.25",
     "@types/lodash": "^4.17.20",
     "@types/node": "^20.11.30",
     "@wopjs/disposable": "^0.1.5",
@@ -47,7 +47,6 @@
     "sass": "^1.72.0",
     "vanilla-lazyload": "^18.0.0",
     "vite": "^5.2.6",
-    "white-web-sdk": "^2.16.53",
-    "@netless/appliance-plugin": "1.1.22-beta.11"
+    "white-web-sdk": "^2.16.59"
   }
 }

@@ -34,6 +34,19 @@ install(register, {
 })
 ```
 
+### Dependency boundary and local development
+
+The library imports WindowManager and White SDK types with `import type`; their
+runtime is supplied by the host through `AppContext` and `install(register)`.
+`install()` also accepts `WindowManager.register` directly. Fastboard is only
+needed by the integration demo, where it creates the room and UI.
+
+Install the library build dependencies with `pnpm install`. To run the Fastboard
+demo, also run `pnpm --dir e2e install`, then `pnpm dev:e2e`. Configure its
+`VITE_*` room settings in the repository's `.env.local`. The private `e2e`
+package owns the Fastboard and appliance plugin dependencies and is not published.
+The library build rejects runtime imports of host packages.
+
 ### Insert This App Into Room
 
 Call [`fastboard.insertDocs()`](https://github.com/netless-io/fastboard#insert-pdf-ppt-and-pptx)

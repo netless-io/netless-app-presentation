@@ -124,26 +124,25 @@ function makeConfig(container: FakeContainer) {
         } as any,
         dispose: { add: (fn: () => void) => disposeFns.push(fn) } as any,
     };
+    const commitBoxFocus = (focused: boolean, signal: "mutation" | "event") => {
+        box.focus = focused;
+        boxClasses.toggle("telebox-blur", !focused);
+        if (signal === "event") {
+            (boxHandlers[focused ? "focus" : "blur"] || []).forEach((fn) => fn());
+        } else {
+            mutationObservers
+                .filter((observer) => observer.target === boxElement)
+                .forEach((observer) => observer.callback());
+        }
+    };
     return {
         config,
         blur: () => focusHandlers.forEach((f) => f(false)),
         focus: () => focusHandlers.forEach((f) => f(true)),
         activity: () => activityHandlers.forEach(f => f()),
         setBoxState: (state: string) => (boxState = state),
-        commitBlur: () => {
-            box.focus = false;
-            boxClasses.toggle("telebox-blur", true);
-            mutationObservers
-                .filter((observer) => observer.target === boxElement)
-                .forEach((observer) => observer.callback());
-        },
-        commitFocus: () => {
-            box.focus = true;
-            boxClasses.toggle("telebox-blur", false);
-            mutationObservers
-                .filter((observer) => observer.target === boxElement)
-                .forEach((observer) => observer.callback());
-        },
+        commitBlur: (signal: "mutation" | "event" = "mutation") => commitBoxFocus(false, signal),
+        commitFocus: (signal: "mutation" | "event" = "mutation") => commitBoxFocus(true, signal),
         disposeAll: () => disposeFns.forEach((f) => f()),
         calls,
         pageIndex,
@@ -224,6 +223,70 @@ test("duplicate focus events run suspend/restore DOM ops only once per episode",
     assert.equal(cfg.calls.suspendPreview, 2);
     assert.equal(cfg.calls.resume, 2);
 });
+
+for (const signal of ["event", "mutation"] as const) {
+    for (const resource of ["gif", "thumbnail"] as const) {
+        test(`TeleBox ${signal} restore allows the next ${resource} blur to degrade again`, () => {
+            listeners["load"] = [];
+            listeners["error"] = [];
+            (document as any).visibilityState = "visible";
+            const full = resource === "gif" ? "https://img.test/animated.gif" : FULL;
+            const container = new FakeContainer(full);
+            const cfg = makeConfig(container);
+            cfg.config.pages[0] = {
+                src: full,
+                ...(resource === "thumbnail" ? { thumbnail: THUMB } : {}),
+                width: 100,
+                height: 100,
+            } as any;
+            let active = false;
+            (cfg.config.context as any).getRuntimeActivity = () => ({ active, revision: 1 });
+            // Setup can finish while the cached box is already blurred.
+            cfg.commitBlur(signal);
+            setupBlurThumbnailDegradation(cfg.config as any);
+            try {
+                cfg.activity();
+                const degraded = container.img.src;
+                if (resource === "gif") assert.match(degraded, /^data:image\/gif;base64,/);
+                else assert.equal(degraded, THUMB);
+                assert.equal(cfg.calls.pause, 1);
+                assert.equal(cfg.calls.suspendPreview, 1);
+
+                // The host snapshot becomes active before its next activity/focus
+                // notification. TeleBox restores without applyActivity running.
+                active = true;
+                cfg.commitFocus(signal);
+                assert.equal(container.img.src, full);
+                assert.equal(cfg.calls.resume, 1);
+                assert.equal(cfg.backgroundClasses.contains("netless-app-presentation-background-suspended"), false);
+
+                // A later loss of focus must start a fresh degradation episode.
+                active = false;
+                cfg.blur();
+                cfg.commitBlur(signal);
+                cfg.activity();
+                cfg.blur();
+                assert.equal(container.img.src, degraded, "next blur re-applies the degraded background");
+                assert.equal(cfg.calls.pause, 2, "next episode pauses preload exactly once");
+                assert.equal(cfg.calls.suspendPreview, 2, "next episode suspends preview exactly once");
+                assert.equal(cfg.backgroundClasses.contains("netless-app-presentation-background-suspended"), resource === "gif");
+
+                container.img.src = full;
+                fireLoad(container.img);
+                assert.equal(container.img.src, degraded, "SDK reload stays degraded while blurred");
+
+                active = true;
+                cfg.focus();
+                cfg.commitFocus(signal);
+                cfg.focus();
+                assert.equal(container.img.src, full);
+                assert.equal(cfg.calls.resume, 2, "duplicate restore notifications resume only once");
+            } finally {
+                cfg.disposeAll();
+            }
+        });
+    }
+}
 
 test("an ignored blur does not consume the focus-state transition", () => {
     listeners["load"] = [];

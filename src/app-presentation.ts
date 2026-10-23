@@ -7,10 +7,10 @@ import type {
   ReadonlyTeleBox,
   Room,
   SceneDefinition,
-  Size,
   View,
   WindowManager,
 } from "@netless/window-manager";
+import type { Size } from "white-web-sdk";
 
 import { disposableStore } from "@wopjs/disposable";
 import { listen } from "@wopjs/dom";
@@ -345,6 +345,9 @@ export const setupBlurThumbnailDegradation = (config: {
   };
 
   const restoreFocusedResources = (): void => {
+    // TeleBox can restore before the host delivers its activity/focus event.
+    // Keep the applied state aligned so the next blur starts a new episode.
+    appliedFocusState = true;
     if (!blurEpisode) return;
     blurEpisode = false;
     failedThumbnailPageIndex = null;

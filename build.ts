@@ -46,6 +46,20 @@ const lazyload = (): esbuild.Plugin => ({
   }
 })
 
+// Host APIs are provided by AppContext or install(register), never imported at runtime.
+const hostTypesOnly = (): esbuild.Plugin => ({
+  name: 'host-types-only',
+  setup({ onResolve }) {
+    onResolve({
+      filter: /^(?:@netless\/(?:window-manager|fastboard(?:-[^/]+)?|appliance-plugin)|white-web-sdk)(?:\/|$)/,
+    }, args => ({
+      errors: [{
+        text: `Presentation cannot import ${args.path} at runtime. Use import type for host types; keep host runtime imports in e2e.`,
+      }],
+    }))
+  },
+})
+
 fs.rmSync('dist', { recursive: true, force: true })
 
 let bundle = await rollup.rollup({
@@ -62,17 +76,11 @@ let bundle = await rollup.rollup({
         sourcemap: true,
         write: false,
         target: ['es2017'],
-        plugins: [sass(), lazyload()],
+        plugins: [hostTypesOnly(), sass(), lazyload()],
         define: {
           __VERSION__: JSON.stringify(version)
         },
-        external: Object.keys({
-          '@netless/window-manager': '*',
-          '@netless/appliance-plugin': '*',
-          '@netless/fastboard': '*',
-          'white-web-sdk': '*',
-          ...peerDependencies,
-        })
+        external: Object.keys(peerDependencies)
       })
       let code: any, map: any
       for (const { path, text } of outputFiles) {
@@ -98,4 +106,6 @@ code = code.replace(`await import('jspdf')`, `jspdf`)
 fs.writeFileSync('dist/index.global.js', code)
 
 if (process.env.DTS != '0')
-  await dts.build('src/index.ts', 'dist/index.d.ts', { exclude: ['@netless/window-manager'] })
+  await dts.build('src/index.ts', 'dist/index.d.ts', {
+    exclude: ['@netless/window-manager', 'white-web-sdk'],
+  })

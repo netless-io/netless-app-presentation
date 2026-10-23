@@ -32,6 +32,17 @@ install(register, {
 })
 ```
 
+### 依赖边界与本地开发
+
+库代码通过 `import type` 引用 WindowManager 和 White SDK 类型；运行时由宿主通过
+`AppContext` 和 `install(register)` 提供。`install()` 也可以直接接收
+`WindowManager.register`。Fastboard 仅用于集成示例中的房间创建和 UI。
+
+使用 `pnpm install` 安装库构建依赖。运行 Fastboard 示例时，再执行
+`pnpm --dir e2e install`，然后运行 `pnpm dev:e2e`；房间的 `VITE_*` 配置放在
+仓库根目录的 `.env.local`。Fastboard 和教具插件依赖由独立的 `e2e` 私有包管理，
+不会随库发布。库构建会拒绝对宿主包的运行时导入。
+
 ### 将应用插入房间
 
 如果你以 `{ as: 'DocsViewer' }` 的方式安装了这个应用，请调用 [`fastboard.insertDocs()`](https://github.com/netless-io/fastboard#insert-pdf-ppt-and-pptx)。

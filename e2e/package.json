@@ -1,0 +1,16 @@
+{
+  "name": "app-presentation-e2e",
+  "private": true,
+  "scripts": {
+    "dev": "vite --open /e2e/",
+    "build": "vite build"
+  },
+  "devDependencies": {
+    "@netless/appliance-plugin": "1.1.45",
+    "@netless/fastboard": "1.1.1-beta.0",
+    "@netless/window-manager": "^1.0.25",
+    "jspdf": "2.5.1",
+    "vite": "^5.2.6",
+    "white-web-sdk": "^2.16.59"
+  }
+}

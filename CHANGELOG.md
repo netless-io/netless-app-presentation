@@ -1,5 +1,11 @@
 # ChangeLog
 
+## 0.1.14 (2026-10-26)
+
+- Restore the applied focus state when TeleBox restores cached resources before host activity events, so the next blur suspends GIFs, thumbnails, previews, and preloads again.
+- Isolate Fastboard and appliance plugin demo dependencies in the private e2e package; keep host SDK imports type-only and reject runtime host imports during the library build.
+- Import camera geometry types directly from White SDK and preserve external host types in generated declarations.
+
 ## 0.1.13 (2026-09-27)
 
 - Add idempotent runtime teardown and suspend image, GIF, preview, and preload resources while a lazy Presentation app is inactive.
